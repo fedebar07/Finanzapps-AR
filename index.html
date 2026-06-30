@@ -49,8 +49,10 @@
 
       /* Barra inferior */
       --nav-h: 56px;
-      /* Safe area iOS (notch abajo) */
+      /* Safe area iOS (notch abajo, y laterales en landscape) */
       --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-l: env(safe-area-inset-left, 0px);
+      --safe-r: env(safe-area-inset-right, 0px);
     }
 
     /* ═══════════════════════════════════════════
@@ -94,6 +96,8 @@
       border-bottom: 1px solid var(--border);
       padding: 14px 20px 12px;
       padding-top: calc(14px + env(safe-area-inset-top, 0px));
+      padding-left: calc(20px + var(--safe-l));
+      padding-right: calc(20px + var(--safe-r));
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -180,6 +184,8 @@
       right: 0;
       height: calc(var(--nav-h) + var(--safe-b));
       padding-bottom: var(--safe-b);
+      padding-left: var(--safe-l);
+      padding-right: var(--safe-r);
       background: var(--surface);
       border-top: 1px solid var(--border);
       display: flex;
@@ -260,6 +266,9 @@
     .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 
+    .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+
+    @media (max-width: 700px) { .grid-5 { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 600px) {
       .grid-4 { grid-template-columns: 1fr 1fr; }
       .grid-3 { grid-template-columns: 1fr 1fr; }
@@ -830,6 +839,38 @@
       #section-gastos .grid-2 { grid-template-columns:1fr; }
     }
 
+    .gast-toggle-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all .2s;
+      letter-spacing: .04em;
+    }
+    .gast-toggle-btn:hover { border-color: var(--gastos); color: var(--gastos); }
+    .gast-collapsible {
+      overflow: hidden;
+      transition: max-height .35s cubic-bezier(.4,0,.2,1), opacity .3s ease;
+      max-height: 700px;
+      opacity: 1;
+    }
+    .gast-collapsible.collapsed { max-height: 0; opacity: 0; }
+
+    /* ═══════════════════════════════════════════
+       LANDSCAPE (cuando se rota el celular)
+    ═══════════════════════════════════════════ */
+    @media (orientation: landscape) and (max-height: 500px) {
+      :root { --nav-h: 50px; }
+      .app-header { padding-top: calc(8px + env(safe-area-inset-top, 0px)); padding-bottom: 8px; }
+      .nav-icon { font-size: 16px; }
+      .nav-item { font-size: 8px; }
+      .content { padding: 14px 16px; }
+    }
+
     /* ═══════════════════════════════════════════
        PLACEHOLDER DE SECCIÓN (temporal)
     ═══════════════════════════════════════════ */
@@ -1325,7 +1366,7 @@
   <div class="content">
 
     <!-- Resumen -->
-    <div class="grid-4" id="gast-summary" style="margin-bottom:14px"></div>
+    <div class="grid-5" id="gast-summary" style="margin-bottom:14px"></div>
 
     <!-- Inflación -->
     <div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
@@ -1371,7 +1412,13 @@
             </optgroup>
           </select>
         </div>
-        <div id="gast-list" style="max-height:520px;overflow-y:auto;display:flex;flex-direction:column;gap:7px"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span id="gast-list-count" style="font-size:11px;color:var(--muted);font-family:var(--mono)"></span>
+          <button class="gast-toggle-btn" onclick="gastToggleSection('gast-list-wrap', this)">ocultar</button>
+        </div>
+        <div class="gast-collapsible" id="gast-list-wrap">
+          <div id="gast-list" style="max-height:520px;overflow-y:auto;display:flex;flex-direction:column;gap:7px"></div>
+        </div>
       </div>
 
       <!-- Formulario + mini chart -->
@@ -1430,12 +1477,22 @@
         </div>
 
         <!-- Mini chart 7 días -->
-        <p class="card-label" style="margin-bottom:8px">Últimos 7 días</p>
-        <div id="gast-week-bars" style="display:flex;align-items:flex-end;gap:5px;height:80px;margin-bottom:16px"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <p class="card-label" style="margin:0">Últimos 7 días</p>
+          <button class="gast-toggle-btn" onclick="gastToggleSection('gast-week-wrap', this)">ocultar</button>
+        </div>
+        <div class="gast-collapsible" id="gast-week-wrap">
+          <div id="gast-week-bars" style="display:flex;align-items:flex-end;gap:5px;height:80px;margin-bottom:16px"></div>
+        </div>
 
         <!-- Por categoría -->
-        <p class="card-label" style="margin-bottom:8px">Por categoría (total)</p>
-        <div id="gast-cat-breakdown" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <p class="card-label" style="margin:0">Por categoría (total)</p>
+          <button class="gast-toggle-btn" onclick="gastToggleSection('gast-cat-wrap', this)">ocultar</button>
+        </div>
+        <div class="gast-collapsible" id="gast-cat-wrap">
+          <div id="gast-cat-breakdown" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
       </div>
     </div>
 
@@ -1447,13 +1504,16 @@
           <button class="btn btn-outline btn-sm" onclick="gastChangeMonth(-1)">‹</button>
           <span id="gast-month-label" style="font-family:var(--mono);font-size:13px;min-width:110px;text-align:center"></span>
           <button class="btn btn-outline btn-sm" onclick="gastChangeMonth(1)">›</button>
+          <button class="gast-toggle-btn" onclick="gastToggleSection('gast-monthly-wrap', this)">ocultar</button>
         </div>
       </div>
-      <div style="position:relative;height:200px;margin-bottom:14px"><canvas id="gast-monthly-canvas"></canvas></div>
-      <!-- Trend 12 meses -->
-      <div id="gast-trend-bars" style="display:flex;align-items:flex-end;gap:4px;height:50px;margin-bottom:8px"></div>
-      <!-- Categorías del mes -->
-      <div id="gast-monthly-cats" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div class="gast-collapsible" id="gast-monthly-wrap">
+        <div style="position:relative;height:200px;margin-bottom:14px"><canvas id="gast-monthly-canvas"></canvas></div>
+        <!-- Trend 12 meses -->
+        <div id="gast-trend-bars" style="display:flex;align-items:flex-end;gap:4px;height:50px;margin-bottom:8px"></div>
+        <!-- Categorías del mes -->
+        <div id="gast-monthly-cats" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
     </div>
 
   </div>
@@ -3789,6 +3849,7 @@ function gastRenderSummary() {
     {label:'Gasto del mes',   val:gastFmt(thisExp),  color:'#ff6b35', key:'month',
       sub: nomChange!==null ? `${nomChange>0?'▲':'▼'} ${Math.abs(nomChange).toFixed(1)}% vs anterior` : ''},
     {label:'Ingresos del mes',val:gastFmt(thisInc),  color:'var(--ok)', key:'inc'},
+    {label:'Ahorro/Inv. del mes', val:gastFmt(thisSav), color:'#a78bfa', key:'sav'},
     {label:'Disponible total',val:gastFmt(balance),  color:balance<0?'var(--danger)':'var(--gastos)', key:'bal',
       title:'Acumulado desde el primer registro'},
   ];
@@ -3828,6 +3889,16 @@ function gastRenderInflResult(nomChange) {
   el.innerHTML = `Variación nominal: <b style="color:${nomColor}">${nomChange>=0?'+':''}${nomChange.toFixed(1)}%</b> &nbsp;·&nbsp; Inflación: <b>${infl}%</b> &nbsp;·&nbsp; Variación real: <b style="color:${realColor}">${real>=0?'+':''}${real.toFixed(1)}%</b>`;
 }
 
+/* ── Toggle colapsables ── */
+function gastToggleSection(id, btn) {
+  const el = document.getElementById(id);
+  const collapsed = el.classList.toggle('collapsed');
+  btn.textContent = collapsed ? 'mostrar' : 'ocultar';
+  if (id === 'gast-monthly-wrap' && !collapsed) {
+    setTimeout(gastRenderMonthly, 350);
+  }
+}
+
 /* ── Lista ── */
 function gastRenderList() {
   const exps = GS().expenses||[];
@@ -3837,6 +3908,8 @@ function gastRenderList() {
   else filtered=exps.filter(e=>e.category===_gastFilter);
 
   const el = document.getElementById('gast-list');
+  const countEl = document.getElementById('gast-list-count');
+  if (countEl) countEl.textContent = filtered.length ? `${filtered.length} registro${filtered.length!==1?'s':''}` : '';
   if (!filtered.length) {
     el.innerHTML=`<div class="empty"><div class="empty-icon">💸</div><p>${_gastFilter==='all'?'Sin registros todavía.':'Sin registros en esta categoría.'}</p></div>`;
     return;
