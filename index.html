@@ -72,8 +72,8 @@
       font-size: 14px;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
-      /* espacio para barra inferior */
-      padding-bottom: calc(var(--nav-h) + var(--safe-b));
+      /* espacio para barra inferior + margen extra de seguridad */
+      padding-bottom: calc(var(--nav-h) + var(--safe-b) + 16px);
     }
 
     ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -172,6 +172,7 @@
       max-width: 900px;
       margin: 0 auto;
       padding: 20px 16px;
+      padding-bottom: calc(var(--nav-h) + var(--safe-b) + 24px);
     }
 
     /* ═══════════════════════════════════════════
@@ -967,8 +968,42 @@
           <div style="display:flex;gap:6px" id="macro-range-btns"></div>
         </div>
         <!-- Selector de indicador -->
-        <div style="overflow-x:auto;padding-bottom:4px;margin-bottom:14px">
-          <div style="display:flex;gap:6px;min-width:max-content" id="macro-chart-tabs"></div>
+        <div style="margin-bottom:14px">
+          <select id="macro-chart-select" class="input" onchange="macroSelectChart(this.value)"
+            style="font-size:13px;border-color:var(--macro)">
+            <option value="__comp_usd">💵 Comparativo USD (Oficial / Blue / MEP)</option>
+            <optgroup label="── Inflación ──">
+              <option value="inflacion">Inflación mensual (%)</option>
+              <option value="inflacion_ia">Inflación interanual (%)</option>
+              <option value="inflacion_acum">Inflación acumulada anual (%)</option>
+            </optgroup>
+            <optgroup label="── Tipos de cambio ──">
+              <option value="dolar_of">Dólar oficial (ARS)</option>
+              <option value="dolar_blue">Dólar blue (ARS)</option>
+              <option value="dolar_mep">Dólar MEP (ARS)</option>
+              <option value="dolar_of_ia">Devaluación interanual — Oficial (%)</option>
+              <option value="dolar_blue_ia">Devaluación interanual — Blue (%)</option>
+              <option value="dolar_mep_ia">Devaluación interanual — MEP (%)</option>
+              <option value="brecha">Brecha cambiaria — Blue (%)</option>
+              <option value="brecha_mep">Brecha cambiaria — MEP (%)</option>
+              <option value="tcrm">Tipo de cambio real multilateral — TCRM</option>
+            </optgroup>
+            <optgroup label="── Tasas ──">
+              <option value="tasa_bcra">Tasa BCRA (% TNA)</option>
+              <option value="tasa_real">Tasa real mensual (%)</option>
+            </optgroup>
+            <optgroup label="── Actividad y dinero ──">
+              <option value="emae">Actividad económica EMAE — var. interanual (%)</option>
+              <option value="emae_mensual">Actividad económica EMAE — var. mensual s.a. (%)</option>
+              <option value="m2">M2 privado — var. mensual real s.e. (%)</option>
+              <option value="m2_ia">M2 privado — var. interanual real (%)</option>
+              <option value="balanza_comercial">Balanza comercial (USD M)</option>
+            </optgroup>
+            <optgroup label="── Reservas y riesgo ──">
+              <option value="reservas">Reservas brutas BCRA (USD M)</option>
+              <option value="riesgo_pais">Riesgo país (bps)</option>
+            </optgroup>
+          </select>
         </div>
         <div id="macro-chart-empty" class="empty" style="display:none;padding:28px 0">
           Necesitás al menos 2 registros para ver el gráfico.
@@ -1471,10 +1506,6 @@
         </div>
         <div class="form-group"><label>Fecha</label><input type="date" id="gast-date" class="input"></div>
         <button class="btn btn-full" id="gast-submit-btn" style="background:var(--gastos);color:#0d0f14;font-weight:700;margin-bottom:10px" onclick="gastAdd()">+ Agregar gasto</button>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px">
-          <button class="btn btn-outline btn-sm" onclick="gastExport()">⬇ Exportar</button>
-          <label class="btn btn-outline btn-sm" style="cursor:pointer;justify-content:center">⬆ Importar<input type="file" accept=".json" style="display:none" onchange="gastImport(event)"></label>
-        </div>
 
         <!-- Mini chart 7 días -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -1926,7 +1957,7 @@ function macroTab(name, btn) {
   document.getElementById('macro-' + name).classList.add('active');
   document.querySelectorAll('.macro-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  if (name==='graficos')  { macroRenderChartTabs(); macroRenderRangeBtns(); macroRenderChart(); }
+  if (name==='graficos')  { macroSyncChartSelect(); macroRenderRangeBtns(); macroRenderChart(); }
   if (name==='historial') macroRenderHistorial();
   if (name==='dashboard') macroRenderDash();
 }
@@ -2110,25 +2141,14 @@ function macroFilterByRange(arr) {
   return arr.filter(e=>e.fecha>=from);
 }
 
-function macroRenderChartTabs() {
-  const HIDE = ['dolar_of','dolar_blue','dolar_mep'];
-  const all  = [...MACRO_INDICATORS,...MACRO_DERIVED].filter(i=>!HIDE.includes(i.id));
-  const compActive = _macroActiveChart==='__comp_usd';
-  document.getElementById('macro-chart-tabs').innerHTML =
-    `<button class="macro-chart-tab${compActive?' active':''}"
-      style="${compActive?'color:#fff;border-color:#fff':''}"
-      onclick="macroSelectChart('__comp_usd')">💵 USD comparativo</button>` +
-    all.map(i=>{
-      const act=i.id===_macroActiveChart;
-      return `<button class="macro-chart-tab${act?' active':''}"
-        style="${act?`color:${i.color};border-color:${i.color}`:''}"
-        onclick="macroSelectChart('${i.id}')">${i.label}</button>`;
-    }).join('');
+function macroSyncChartSelect() {
+  const sel = document.getElementById('macro-chart-select');
+  if (sel) sel.value = _macroActiveChart;
 }
 
 function macroSelectChart(id) {
-  _macroActiveChart=id;
-  macroRenderChartTabs();
+  _macroActiveChart = id;
+  macroSyncChartSelect();
   macroRenderChart();
 }
 
@@ -3036,41 +3056,74 @@ portPopulateSelects();
 /* ═══════════════════════════════════════════════════════════
    MÓDULO: HODLER
 ═══════════════════════════════════════════════════════════ */
-const HODL_COINS = {BTC:'bitcoin',ETH:'ethereum',SOL:'solana',BNB:'binancecoin',XRP:'ripple',TRX:'tron'};
+const HODL_COIN_IDS = {
+  BTC:'bitcoin', ETH:'ethereum', SOL:'solana', BNB:'binancecoin',
+  XRP:'ripple', TRX:'tron', ADA:'cardano', DOGE:'dogecoin',
+  AVAX:'avalanche-2', DOT:'polkadot', MATIC:'matic-network',
+  LINK:'chainlink', UNI:'uniswap', ATOM:'cosmos', LTC:'litecoin',
+  NEAR:'near', ARB:'arbitrum', OP:'optimism', PEPE:'pepe',
+};
+
 let _hodlPrices = {};
 let _hodlEditBotIdx = null;
 let _hodlEditBotField = null;
 
 const HS = () => STATE.hodler;
 const hodlSave = () => saveState();
-
 function hodlFmtN(n, dec) {
   return n.toLocaleString('es-AR', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
 
-/* ── Sub-nav ── */
-function hodlTab(name, btn) {
-  document.querySelectorAll('.hodl-panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('hodl-' + name).classList.add('active');
-  document.querySelectorAll('.hodl-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+// Devuelve el coin ID de CoinGecko para un símbolo, si lo conocemos
+function hodlGetCoinId(sym) {
+  return HODL_COIN_IDS[sym.toUpperCase()] || sym.toLowerCase();
 }
 
-/* ── Precios CoinGecko ── */
+// Construye la lista de símbolos a consultar:
+// los del portafolio del usuario + los de la barra de precios fija
+function hodlGetSymbolsToFetch() {
+  const fromPortfolio = Object.keys(HS().activos || {}).map(s => s.toUpperCase());
+  const fixed = Object.keys(HODL_COIN_IDS);
+  return [...new Set([...fixed, ...fromPortfolio])];
+}
+
 async function hodlFetchPrices() {
   const btn = document.querySelector('#section-hodler .btn-outline[onclick="hodlFetchPrices()"]');
   if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
   try {
-    const ids = Object.values(HODL_COINS).join(',');
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`, {signal: AbortSignal.timeout(8000)});
-    const data = await res.json();
-    Object.entries(HODL_COINS).forEach(([sym, id]) => {
-      if (data[id]) _hodlPrices[sym] = {precio: data[id].usd, cambio24h: data[id].usd_24h_change};
+    const symbols = hodlGetSymbolsToFetch();
+    const ids = symbols.map(hodlGetCoinId).join(',');
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
+    let data;
+    try {
+      // Intento directo
+      const res = await fetch(url, {signal: AbortSignal.timeout(8000)});
+      if (!res.ok) throw new Error('status ' + res.status);
+      data = await res.json();
+    } catch {
+      // Fallback: proxy allorigins (evita bloqueos CORS y rate limits)
+      const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+      const res2 = await fetch(proxy, {signal: AbortSignal.timeout(10000)});
+      const json2 = await res2.json();
+      data = JSON.parse(json2.contents);
+    }
+    // Mapear respuesta a símbolos del usuario
+    symbols.forEach(sym => {
+      const id = hodlGetCoinId(sym);
+      if (data[id]) {
+        _hodlPrices[sym] = {
+          precio: data[id].usd,
+          cambio24h: data[id].usd_24h_change ?? 0,
+        };
+      }
     });
     const hora = new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
     const ts = document.getElementById('hodl-prices-ts');
-    if (ts) ts.textContent = hora;
-  } catch { /* sin conexión — precios manuales siguen funcionando */ }
+    if (ts) ts.textContent = '✓ ' + hora;
+  } catch {
+    const ts = document.getElementById('hodl-prices-ts');
+    if (ts) ts.textContent = '⚠ Sin conexión';
+  }
   if (btn) { btn.textContent = '🔄 Actualizar'; btn.disabled = false; }
   hodlRenderPricesBar();
   hodlRenderActivos();
@@ -4113,32 +4166,6 @@ function gastChangeMonth(dir) {
   gastRenderMonthly();
 }
 function gastJumpToMonth(m,y){ _gastChartMonth=m; _gastChartYear=y; gastRenderMonthly(); }
-
-/* ── Export / Import ── */
-function gastExport() {
-  const data={version:2,exportedAt:new Date().toISOString(),expenses:GS().expenses||[]};
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=`gastos-${new Date().toISOString().slice(0,10)}.json`; a.click();
-  URL.revokeObjectURL(url);
-  showToast('✓ Datos exportados','ok');
-}
-function gastImport(event) {
-  const file=event.target.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    try{
-      const data=JSON.parse(ev.target.result);
-      if(!data.expenses||!Array.isArray(data.expenses)) throw new Error('Formato inválido');
-      GS().expenses=data.expenses.sort((a,b)=>b.id-a.id);
-      gastSave(); gastRenderAll();
-      showToast(`✓ ${GS().expenses.length} registros importados`,'ok');
-    }catch{ showToast('✗ Archivo inválido','err'); }
-    event.target.value='';
-  };
-  reader.readAsText(file);
-}
 
 /* ── Render all ── */
 function gastRenderAll() {
