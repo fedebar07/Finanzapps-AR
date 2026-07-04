@@ -1275,7 +1275,7 @@
       <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Precios</span>
       <div id="hodl-prices-list" style="display:flex;flex-wrap:wrap;gap:8px;flex:1"><span style="font-size:12px;color:var(--muted)">Cargando...</span></div>
       <span id="hodl-prices-ts" style="font-size:10px;color:var(--muted);font-family:var(--mono)"></span>
-      <button class="btn btn-outline btn-sm" onclick="hodlFetchPrices()">🔄 Actualizar</button>
+      <button class="btn btn-outline btn-sm" id="hodl-refresh-btn" onclick="hodlFetchPrices()">🔄 Actualizar</button>
     </div>
 
     <!-- Resumen global -->
@@ -3081,12 +3081,20 @@ portPopulateSelects();
 /* ═══════════════════════════════════════════════════════════
    MÓDULO: HODLER
 ═══════════════════════════════════════════════════════════ */
+// Monedas fijas para la barra de precios (las más comunes)
 const HODL_COIN_IDS = {
-  BTC:'bitcoin', ETH:'ethereum', SOL:'solana', BNB:'binancecoin',
-  XRP:'ripple', TRX:'tron', ADA:'cardano', DOGE:'dogecoin',
+  BTC:'bitcoin', ETH:'ethereum', SOL:'solana',
+  BNB:'binancecoin', XRP:'ripple', USDT:'tether',
+};
+
+// Diccionario extendido para mapear símbolo → ID de CoinGecko
+const HODL_COIN_MAP = {
+  ...HODL_COIN_IDS,
+  TRX:'tron', ADA:'cardano', DOGE:'dogecoin',
   AVAX:'avalanche-2', DOT:'polkadot', MATIC:'matic-network',
   LINK:'chainlink', UNI:'uniswap', ATOM:'cosmos', LTC:'litecoin',
   NEAR:'near', ARB:'arbitrum', OP:'optimism', PEPE:'pepe',
+  SHIB:'shiba-inu', TON:'the-open-network', APT:'aptos',
 };
 
 let _hodlPrices = {};
@@ -3099,56 +3107,67 @@ function hodlFmtN(n, dec) {
   return n.toLocaleString('es-AR', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
 
-// Devuelve el coin ID de CoinGecko para un símbolo, si lo conocemos
 function hodlGetCoinId(sym) {
-  return HODL_COIN_IDS[sym.toUpperCase()] || sym.toLowerCase();
+  return HODL_COIN_MAP[sym.toUpperCase()] || sym.toLowerCase();
 }
 
-// Construye la lista de símbolos a consultar:
-// los del portafolio del usuario + los de la barra de precios fija
+// Solo pide precios de: activos del usuario + barra fija (máximo ~10 IDs para no saturar la API)
 function hodlGetSymbolsToFetch() {
   const fromPortfolio = Object.keys(HS().activos || {}).map(s => s.toUpperCase());
   const fixed = Object.keys(HODL_COIN_IDS);
-  return [...new Set([...fixed, ...fromPortfolio])];
+  return [...new Set([...fromPortfolio, ...fixed])].slice(0, 15);
 }
 
 async function hodlFetchPrices() {
-  const btn = document.querySelector('#section-hodler .btn-outline[onclick="hodlFetchPrices()"]');
+  const btn = document.getElementById('hodl-refresh-btn');
+  const ts  = document.getElementById('hodl-prices-ts');
   if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+  if (ts)  ts.textContent = 'Actualizando...';
+
+  const symbols = hodlGetSymbolsToFetch();
+  const ids = [...new Set(symbols.map(hodlGetCoinId))].join(',');
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
+
+  let data = null;
+  let errorMsg = '';
+
+  // Intento 1: directo a CoinGecko
   try {
-    const symbols = hodlGetSymbolsToFetch();
-    const ids = symbols.map(hodlGetCoinId).join(',');
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
-    let data;
+    const res = await fetch(url, {signal: AbortSignal.timeout(8000)});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    data = await res.json();
+  } catch(e1) {
+    errorMsg = e1.message;
+    // Intento 2: proxy allorigins
     try {
-      // Intento directo
-      const res = await fetch(url, {signal: AbortSignal.timeout(8000)});
-      if (!res.ok) throw new Error('status ' + res.status);
-      data = await res.json();
-    } catch {
-      // Fallback: proxy allorigins (evita bloqueos CORS y rate limits)
       const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-      const res2 = await fetch(proxy, {signal: AbortSignal.timeout(10000)});
+      const res2  = await fetch(proxy, {signal: AbortSignal.timeout(12000)});
       const json2 = await res2.json();
+      if (!json2.contents) throw new Error('Proxy sin contenido');
       data = JSON.parse(json2.contents);
+      if (typeof data !== 'object' || Array.isArray(data)) throw new Error('Respuesta inválida');
+      errorMsg = '';
+    } catch(e2) {
+      errorMsg = 'Sin conexión o API no disponible';
     }
-    // Mapear respuesta a símbolos del usuario
+  }
+
+  if (data) {
     symbols.forEach(sym => {
       const id = hodlGetCoinId(sym);
-      if (data[id]) {
+      if (data[id]?.usd) {
         _hodlPrices[sym] = {
-          precio: data[id].usd,
+          precio:   data[id].usd,
           cambio24h: data[id].usd_24h_change ?? 0,
         };
       }
     });
     const hora = new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
-    const ts = document.getElementById('hodl-prices-ts');
     if (ts) ts.textContent = '✓ ' + hora;
-  } catch {
-    const ts = document.getElementById('hodl-prices-ts');
-    if (ts) ts.textContent = '⚠ Sin conexión';
+  } else {
+    if (ts) ts.textContent = '⚠ ' + errorMsg;
   }
+
   if (btn) { btn.textContent = '🔄 Actualizar'; btn.disabled = false; }
   hodlRenderPricesBar();
   hodlRenderActivos();
