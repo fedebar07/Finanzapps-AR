@@ -1418,7 +1418,32 @@
 
       <!-- Lista de gastos -->
       <div>
-        <!-- Filtro -->
+        <!-- Filtro mes -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px">Mes</label>
+            <select id="gast-filter-month" class="input" onchange="gastSetFilterMonth(this.value)">
+              <option value="all">Todos los meses</option>
+              <option value="01">Enero</option>
+              <option value="02">Febrero</option>
+              <option value="03">Marzo</option>
+              <option value="04">Abril</option>
+              <option value="05">Mayo</option>
+              <option value="06">Junio</option>
+              <option value="07">Julio</option>
+              <option value="08">Agosto</option>
+              <option value="09">Septiembre</option>
+              <option value="10">Octubre</option>
+              <option value="11">Noviembre</option>
+              <option value="12">Diciembre</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px">Año</label>
+            <select id="gast-filter-year" class="input" onchange="gastSetFilterYear(this.value)"></select>
+          </div>
+        </div>
+        <!-- Filtro categoría -->
         <div style="margin-bottom:10px">
           <select id="gast-filter" class="input" onchange="gastSetFilter(this.value)">
             <option value="all">📋 Todos los registros</option>
@@ -3789,6 +3814,8 @@ const gastSave = () => saveState();
 
 let _gastType       = 'gasto';
 let _gastFilter     = 'all';
+let _gastFilterMonth= 'all';
+let _gastFilterYear = 'all';
 let _gastEditId     = null;
 let _gastChartMonth = new Date().getMonth();
 let _gastChartYear  = new Date().getFullYear();
@@ -3872,7 +3899,22 @@ function gastSaveEdit() {
   showToast('✓ Registro actualizado','ok');
 }
 
-/* ── Filtro ── */
+/* ── Filtro mes/año ── */
+function gastBuildYearSelect() {
+  const exps = GS().expenses || [];
+  const years = [...new Set(exps.map(e => e.date.slice(0,4)))].sort((a,b)=>b-a);
+  const curYear = String(gastToday.getFullYear());
+  if (!years.includes(curYear)) years.unshift(curYear);
+  const sel = document.getElementById('gast-filter-year');
+  if (!sel) return;
+  sel.innerHTML = '<option value="all">Todos los años</option>' +
+    years.map(y => `<option value="${y}"${y===curYear?' selected':''}>${y}</option>`).join('');
+  _gastFilterYear = curYear;
+}
+function gastSetFilterMonth(val) { _gastFilterMonth = val; gastRenderList(); }
+function gastSetFilterYear(val)  { _gastFilterYear  = val; gastRenderList(); }
+
+/* ── Filtro categoría ── */
 function gastSetFilter(val) {
   _gastFilter = val;
   gastRenderList();
@@ -3955,18 +3997,34 @@ function gastToggleSection(id, btn) {
 /* ── Lista ── */
 function gastRenderList() {
   const exps = GS().expenses||[];
-  let filtered;
-  if (_gastFilter==='all')         filtered=exps;
-  else if (_gastFilter==='__ingresos') filtered=exps.filter(gastIsIncome);
-  else filtered=exps.filter(e=>e.category===_gastFilter);
+
+  // Filtros combinados: año, mes y categoría
+  const filtered = exps.filter(e => {
+    const [y, m] = e.date.split('-');
+    if (_gastFilterYear  !== 'all' && y !== _gastFilterYear)  return false;
+    if (_gastFilterMonth !== 'all' && m !== _gastFilterMonth) return false;
+    if (_gastFilter === '__ingresos') return gastIsIncome(e);
+    if (_gastFilter !== 'all') return e.category === _gastFilter;
+    return true;
+  });
+
+  // Totales del período filtrado para mostrar en el contador
+  const totalExp = filtered.filter(gastIsExpense).reduce((s,e)=>s+e.amount,0);
+  const totalInc = filtered.filter(gastIsIncome).reduce((s,e)=>s+e.amount,0);
 
   const el = document.getElementById('gast-list');
   const countEl = document.getElementById('gast-list-count');
-  if (countEl) countEl.textContent = filtered.length ? `${filtered.length} registro${filtered.length!==1?'s':''}` : '';
+  if (countEl) {
+    const parts = [`${filtered.length} registro${filtered.length!==1?'s':''}`];
+    if (totalExp>0) parts.push(`Gasto: ${gastFmt(totalExp)}`);
+    if (totalInc>0) parts.push(`Ingreso: ${gastFmt(totalInc)}`);
+    countEl.textContent = parts.join(' · ');
+  }
   if (!filtered.length) {
-    el.innerHTML=`<div class="empty"><div class="empty-icon">💸</div><p>${_gastFilter==='all'?'Sin registros todavía.':'Sin registros en esta categoría.'}</p></div>`;
+    el.innerHTML=`<div class="empty"><div class="empty-icon">💸</div><p>Sin registros para el período seleccionado.</p></div>`;
     return;
   }
+
   el.innerHTML = filtered.map(e => {
     const cfg   = GAST_CAT_CFG[e.category]||{emoji:'📦',color:'#6b7280'};
     const dateStr=new Date(e.date+'T12:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'});
@@ -4177,7 +4235,10 @@ function gastRenderAll() {
 }
 
 /* ── Init ── */
-function ongastosEnter() { gastRenderAll(); }
+function ongastosEnter() {
+  gastBuildYearSelect();
+  gastRenderAll();
+}
 
 // Fecha de hoy
 document.getElementById('gast-date').value = gastToday.toISOString().split('T')[0];
@@ -4186,6 +4247,7 @@ const _gastInflKey = gastMonthKey(gastToday.getFullYear(), gastToday.getMonth())
 if (GS().inflation?.[_gastInflKey] != null)
   document.getElementById('gast-infl').value = GS().inflation[_gastInflKey];
 
+gastBuildYearSelect();
 gastRenderAll();
 window.addEventListener('resize', ()=>{ if(document.getElementById('section-gastos').classList.contains('active')) gastRenderMonthly(); });
 
