@@ -1003,6 +1003,12 @@
               <option value="reservas">Reservas brutas BCRA (USD M)</option>
               <option value="riesgo_pais">Riesgo país (bps)</option>
             </optgroup>
+            <optgroup label="── Resultado fiscal ──">
+              <option value="resultado_primario">Resultado primario mensual — ✚ superávit / ✖ déficit (USD M)</option>
+              <option value="resultado_financiero">Resultado financiero mensual — ✚ superávit / ✖ déficit (USD M)</option>
+              <option value="resultado_primario_12m">Resultado primario — acumulado 12 meses (USD M)</option>
+              <option value="resultado_financiero_12m">Resultado financiero — acumulado 12 meses (USD M)</option>
+            </optgroup>
           </select>
         </div>
         <div id="macro-chart-empty" class="empty" style="display:none;padding:28px 0">
@@ -1859,18 +1865,24 @@ const MACRO_INDICATORS = [
   { id:'emae_mensual',     label:'Actividad (EMAE) var. mensual s.a.',             unit:'%',      color:'#0ea5e9', dec:1,  min:-10,    max:10     },
   { id:'balanza_comercial',label:'Balanza comercial',                              unit:'USD M',  color:'#f472b6', dec:0,  min:-50000, max:50000  },
   { id:'m2',               label:'M2 priv. transaccional var. mensual real s.e.',  unit:'%',      color:'#c084fc', dec:2,  min:-20,    max:50     },
+  { id:'resultado_primario',  label:'Resultado primario (sin intereses de deuda)', unit:'USD M',  color:'#86efac', dec:0,  min:-1e5,   max:1e5,
+    hint:'✚ superávit · ✖ déficit · No incluye lo que el Estado paga por sus deudas' },
+  { id:'resultado_financiero', label:'Resultado financiero (incluyendo intereses de deuda)', unit:'USD M', color:'#fca5a5', dec:0, min:-1e5, max:1e5,
+    hint:'✚ superávit · ✖ déficit · Incluye lo que el Estado paga por sus deudas' },
 ];
 
 const MACRO_DERIVED = [
-  { id:'inflacion_ia',   label:'Inflación interanual',             unit:'%', color:'#fb923c', dec:2 },
-  { id:'inflacion_acum', label:'Inflación acum. anual',            unit:'%', color:'#fdba74', dec:2 },
-  { id:'brecha',         label:'Brecha cambiaria (blue)',          unit:'%', color:'#2dd4bf', dec:2 },
-  { id:'brecha_mep',     label:'Brecha cambiaria (MEP)',           unit:'%', color:'#5eead4', dec:2 },
-  { id:'tasa_real',      label:'Tasa real mensual',                unit:'%', color:'#facc15', dec:2 },
-  { id:'dolar_of_ia',    label:'Devaluación interanual (oficial)', unit:'%', color:'#3b82f6', dec:2 },
-  { id:'dolar_blue_ia',  label:'Devaluación interanual (blue)',    unit:'%', color:'#10b981', dec:2 },
-  { id:'dolar_mep_ia',   label:'Devaluación interanual (MEP)',     unit:'%', color:'#8b5cf6', dec:2 },
-  { id:'m2_ia',          label:'M2 priv. var. interanual real',    unit:'%', color:'#a855f7', dec:2 },
+  { id:'inflacion_ia',          label:'Inflación interanual',                           unit:'%',     color:'#fb923c', dec:2 },
+  { id:'inflacion_acum',        label:'Inflación acum. anual',                          unit:'%',     color:'#fdba74', dec:2 },
+  { id:'brecha',                label:'Brecha cambiaria (blue)',                        unit:'%',     color:'#2dd4bf', dec:2 },
+  { id:'brecha_mep',            label:'Brecha cambiaria (MEP)',                         unit:'%',     color:'#5eead4', dec:2 },
+  { id:'tasa_real',             label:'Tasa real mensual',                              unit:'%',     color:'#facc15', dec:2 },
+  { id:'dolar_of_ia',           label:'Devaluación interanual (oficial)',               unit:'%',     color:'#3b82f6', dec:2 },
+  { id:'dolar_blue_ia',         label:'Devaluación interanual (blue)',                  unit:'%',     color:'#10b981', dec:2 },
+  { id:'dolar_mep_ia',          label:'Devaluación interanual (MEP)',                   unit:'%',     color:'#8b5cf6', dec:2 },
+  { id:'m2_ia',                 label:'M2 priv. var. interanual real',                  unit:'%',     color:'#a855f7', dec:2 },
+  { id:'resultado_primario_12m', label:'Resultado primario — acumulado 12 meses',       unit:'USD M', color:'#4ade80', dec:0 },
+  { id:'resultado_financiero_12m',label:'Resultado financiero — acumulado 12 meses',   unit:'USD M', color:'#f87171', dec:0 },
 ];
 
 const MACRO_RANGE_OPTS = [
@@ -1914,6 +1926,26 @@ function macroWithDerived() {
     mepMap[e.fecha]  = n('dolar_mep');
     m2Map[e.fecha]   = n('m2');
   });
+
+  // Mapas para resultado primario y financiero (valores en USD M, pueden ser negativos)
+  const rpMap={}, rfMap={};
+  sorted.forEach(e => {
+    const n = k => (e[k]!==''&&e[k]!=null&&!isNaN(Number(e[k]))) ? Number(e[k]) : null;
+    rpMap[e.fecha] = n('resultado_primario');
+    rfMap[e.fecha] = n('resultado_financiero');
+  });
+
+  // Suma simple de los últimos 12 meses (acumulado rodante)
+  function rolling12(map, year, mStr) {
+    let sum=0, ok=true;
+    for(let i=0;i<12;i++){
+      const d=new Date(year,Number(mStr)-1-i,1);
+      const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      if(map[k]==null){ok=false;break;}
+      sum+=map[k];
+    }
+    return ok ? sum : '';
+  }
 
   function chainedIA(map, year, mStr) {
     let p=1;
@@ -1971,6 +2003,8 @@ function macroWithDerived() {
       dolar_blue_ia: yoy(blueMap, e.fecha, year, mStr),
       dolar_mep_ia:  yoy(mepMap,  e.fecha, year, mStr),
       m2_ia:         chainedIA(m2Map, year, mStr),
+      resultado_primario_12m:   rolling12(rpMap, year, mStr),
+      resultado_financiero_12m: rolling12(rfMap, year, mStr),
     };
   });
 }
@@ -2002,9 +2036,17 @@ function macroRenderDash() {
   document.getElementById('macro-cards').innerHTML = allCards.map(ind => {
     const last = [...derived].reverse().find(e => e[ind.id]!==''&&e[ind.id]!=null);
     const val  = last ? macroFmtVal(last[ind.id], ind.unit, ind.dec) : null;
+    // Para indicadores fiscales: mostrar etiqueta superávit/déficit
+    const isFiscal = ind.id==='resultado_primario'||ind.id==='resultado_financiero'
+                   ||ind.id==='resultado_primario_12m'||ind.id==='resultado_financiero_12m';
+    const fiscalNum = last ? Number(last[ind.id]) : null;
+    const fiscalTag = isFiscal && fiscalNum!=null
+      ? `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-top:4px;display:inline-block;background:${fiscalNum>=0?'rgba(74,222,128,.15)':'rgba(248,81,73,.15)'};color:${fiscalNum>=0?'#4ade80':'#f85149'}">${fiscalNum>=0?'✚ SUPERÁVIT':'✖ DÉFICIT'}</span>`
+      : '';
     return `<div class="macro-card" style="border-left-color:${ind.color}">
       <div class="macro-card-label">${ind.label}</div>
       <div class="macro-card-value" style="color:${ind.color}">${val??'—'}</div>
+      ${fiscalTag}
       ${last?`<div class="macro-card-date">${last.fecha}</div>`:''}
     </div>`;
   }).join('');
@@ -2020,6 +2062,7 @@ function macroBuildInputs() {
       <label>${ind.label}${ind.unit?` <span style="color:var(--dimmed)">(${ind.unit})</span>`:''}</label>
       <input type="number" step="any" min="${ind.min}" max="${ind.max}"
         placeholder="—" id="mf-${ind.id}" class="input">
+      ${ind.hint?`<p style="font-size:10px;color:var(--muted);margin-top:3px">${ind.hint}</p>`:''}
     </div>`).join('');
 }
 
