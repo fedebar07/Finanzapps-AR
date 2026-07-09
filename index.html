@@ -840,6 +840,7 @@
     .gast-trend-label { font-family:var(--mono); font-size:9px; color:var(--muted); }
     @media(max-width:700px) {
       #section-gastos .grid-2 { grid-template-columns:1fr; }
+      #gast-monthly-summary { grid-template-columns:1fr 1fr !important; }
     }
 
     .gast-toggle-btn {
@@ -1595,6 +1596,8 @@
         </div>
       </div>
       <div class="gast-collapsible" id="gast-monthly-wrap">
+        <!-- Resumen total del mes -->
+        <div id="gast-monthly-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px"></div>
         <div style="position:relative;height:200px;margin-bottom:14px"><canvas id="gast-monthly-canvas"></canvas></div>
         <!-- Trend 12 meses -->
         <div id="gast-trend-bars" style="display:flex;align-items:flex-end;gap:4px;height:50px;margin-bottom:8px"></div>
@@ -4393,11 +4396,43 @@ function gastRenderCatBreakdown() {
   }).join('');
 }
 
+/* ── Resumen total del mes (arriba del gráfico) ── */
+function gastRenderMonthlySummary() {
+  const el = document.getElementById('gast-monthly-summary');
+  if (!el) return;
+  const key = gastMonthKey(_gastChartYear, _gastChartMonth);
+  const monthItems = (GS().expenses||[]).filter(e => e.date.startsWith(key));
+  const totalExp = monthItems.filter(gastIsExpense).reduce((s,e)=>s+e.amount,0);
+  const totalInc = monthItems.filter(gastIsIncome).reduce((s,e)=>s+e.amount,0);
+  const totalSav = monthItems.filter(gastIsSavings).reduce((s,e)=>s+e.amount,0);
+  const balance  = totalInc - totalExp - totalSav;
+
+  el.innerHTML = `
+    <div class="card" style="padding:12px;border-top:2px solid #ff6b35">
+      <p class="card-label" style="margin-bottom:4px">Total gastado</p>
+      <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:#ff6b35">${gastFmt(totalExp)}</p>
+    </div>
+    <div class="card" style="padding:12px;border-top:2px solid var(--ok)">
+      <p class="card-label" style="margin-bottom:4px">Total ingresado</p>
+      <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--ok)">${gastFmt(totalInc)}</p>
+    </div>
+    <div class="card" style="padding:12px;border-top:2px solid #a78bfa">
+      <p class="card-label" style="margin-bottom:4px">Ahorro / Inversión</p>
+      <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:#a78bfa">${gastFmt(totalSav)}</p>
+    </div>
+    <div class="card" style="padding:12px;border-top:2px solid ${balance<0?'var(--danger)':'var(--gastos)'}">
+      <p class="card-label" style="margin-bottom:4px">Balance del mes</p>
+      <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:${balance<0?'var(--danger)':'var(--gastos)'}">${balance>=0?'+':''}${gastFmt(balance)}</p>
+    </div>
+  `;
+}
+
 /* ── Gráfico mensual (canvas) ── */
 function gastRenderMonthly() {
   const monthNames=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const label=document.getElementById('gast-month-label');
   if(label) label.textContent=`${monthNames[_gastChartMonth]} ${_gastChartYear}`;
+  gastRenderMonthlySummary();
 
   const canvas=document.getElementById('gast-monthly-canvas');
   if(!canvas) return;
