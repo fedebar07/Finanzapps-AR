@@ -29,10 +29,11 @@
       --dimmed:    #383d55;
 
       /* Acentos por sección */
-      --macro:     #38bdf8;   /* celeste  — Macro AR     */
-      --port:      #4ade80;   /* verde    — Portafolio   */
-      --hodl:      #f0b429;   /* dorado   — Hodler       */
-      --gastos:    #e8ff47;   /* lima     — Gastos       */
+      --macro:     #38bdf8;
+      --port:      #4ade80;
+      --hodl:      #f0b429;
+      --gastos:    #e8ff47;
+      --micro:     #f472b6;
 
       /* Semánticos */
       --ok:        #4ade80;
@@ -239,6 +240,7 @@
     .nav-item.active[data-section="portfolio"] { color: var(--port);  }
     .nav-item.active[data-section="hodler"]    { color: var(--hodl);  }
     .nav-item.active[data-section="gastos"]    { color: var(--gastos);}
+    .nav-item.active[data-section="micro"]     { color: var(--micro); }
 
     /* ═══════════════════════════════════════════
        COMPONENTES COMUNES
@@ -871,6 +873,29 @@
       .nav-item { font-size: 8px; }
       .content { padding: 14px 16px; }
     }
+
+    /* ═══════════════════════════════════════════
+       MICRO AR
+    ═══════════════════════════════════════════ */
+    .micro-panel { display:none; }
+    .micro-panel.active { display:block; }
+    .micro-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+    .micro-card-label { font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;line-height:1.3; }
+    .micro-card-value { font-family:var(--mono);font-size:20px;font-weight:700;line-height:1; }
+    .micro-card-date  { font-family:var(--mono);font-size:10px;color:var(--dimmed);margin-top:5px; }
+    .micro-card-sub   { font-size:10px;margin-top:4px; }
+    .micro-range-btn {
+      padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;
+      cursor:pointer;border:1px solid var(--border);background:var(--surface);
+      color:var(--muted);font-family:var(--sans);transition:all .15s;
+    }
+    .micro-range-btn.active { background:var(--micro);border-color:var(--micro);color:#0d0f14; }
 
     /* ═══════════════════════════════════════════
        PLACEHOLDER DE SECCIÓN (temporal)
@@ -1602,6 +1627,117 @@
 
 </section>
 
+<!-- MICRO AR -->
+<section id="section-micro" class="section">
+
+  <div class="macro-subnav">
+    <button class="micro-tab macro-tab active" data-tab="mdash"     onclick="microTab('mdash',this)">Dashboard</button>
+    <button class="micro-tab macro-tab"        data-tab="mcargar"   onclick="microTab('mcargar',this)">Cargar</button>
+    <button class="micro-tab macro-tab"        data-tab="mgraficos" onclick="microTab('mgraficos',this)">Gráficos</button>
+    <button class="micro-tab macro-tab"        data-tab="mhistorial"onclick="microTab('mhistorial',this)">Historial</button>
+  </div>
+
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div id="micro-mdash" class="micro-panel active">
+      <div id="micro-dash-empty" class="empty" style="display:none">
+        <div class="empty-icon">🏘️</div>
+        <p>Sin datos cargados.<br>Andá a <strong>Cargar</strong> para empezar.</p>
+      </div>
+      <div id="micro-dash-content">
+        <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Último valor registrado por indicador</p>
+        <div class="grid-3" id="micro-cards" style="gap:10px;margin-bottom:16px"></div>
+        <p id="micro-entry-count" style="font-size:11px;color:var(--dimmed)"></p>
+      </div>
+    </div>
+
+    <!-- CARGAR -->
+    <div id="micro-mcargar" class="micro-panel">
+      <div class="card">
+        <p style="font-size:13px;font-weight:700;margin-bottom:16px" id="micro-form-title">Nuevo registro</p>
+        <div class="form-group">
+          <label>Fecha (mes)</label>
+          <input type="month" id="micf-fecha" class="input">
+        </div>
+        <div id="micro-inputs" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px"></div>
+        <div style="display:flex;gap:10px;margin-top:18px">
+          <button class="btn btn-full" style="background:var(--micro);color:#0d0f14;font-weight:700" onclick="microSubmit()">Guardar</button>
+          <button class="btn btn-ghost" id="micro-cancel-btn" style="display:none" onclick="microCancelEdit()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRÁFICOS -->
+    <div id="micro-mgraficos" class="micro-panel">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+          <p style="font-size:13px;font-weight:700">Evolución histórica</p>
+          <div style="display:flex;gap:6px" id="micro-range-btns"></div>
+        </div>
+        <div style="margin-bottom:14px">
+          <select id="micro-chart-select" class="input" onchange="microSelectChart(this.value)"
+            style="font-size:13px;border-color:var(--micro)">
+            <optgroup label="── Canastas ──">
+              <option value="cba">CBA — Canasta Básica Alimentaria (hogar tipo)</option>
+              <option value="cbt">CBT — Canasta Básica Total / umbral de pobreza (hogar tipo)</option>
+            </optgroup>
+            <optgroup label="── Salarios ──">
+              <option value="ripte">RIPTE — Salario promedio trabajadores formales (ARS)</option>
+              <option value="ripte_real">RIPTE real — Salario promedio ajustado por inflación</option>
+              <option value="ripte_ia">RIPTE — Variación interanual (%)</option>
+              <option value="poder_adquisitivo">Poder adquisitivo — ¿cuántas CBT cubre el RIPTE?</option>
+            </optgroup>
+            <optgroup label="── Sectorial ──">
+              <option value="acara">ACARA — Patentamientos de autos 0km (unidades)</option>
+              <option value="acara_ia">ACARA — Variación interanual (%)</option>
+              <option value="afcp">AFCP — Despachos de cemento (miles de toneladas)</option>
+              <option value="afcp_ia">AFCP — Variación interanual (%)</option>
+            </optgroup>
+            <optgroup label="── Variaciones mensuales ──">
+              <option value="cba_var">CBA — Variación mensual (%)</option>
+              <option value="cbt_var">CBT — Variación mensual (%)</option>
+            </optgroup>
+          </select>
+        </div>
+        <div id="micro-chart-empty" class="empty" style="display:none;padding:28px 0">
+          Necesitás al menos 2 registros para ver el gráfico.
+        </div>
+        <div style="position:relative;height:260px" id="micro-chart-wrap">
+          <canvas id="micro-chart"></canvas>
+        </div>
+        <p id="micro-chart-legend" style="font-size:11px;color:var(--dimmed);margin-top:8px;text-align:right"></p>
+      </div>
+    </div>
+
+    <!-- HISTORIAL -->
+    <div id="micro-mhistorial" class="micro-panel">
+      <div class="card">
+        <p style="font-size:13px;font-weight:700;margin-bottom:14px">Historial de registros</p>
+        <div id="micro-hist-empty" class="empty" style="display:none;padding:24px 0">Sin registros todavía.</div>
+        <div class="table-wrap" id="micro-hist-wrap">
+          <table><thead id="micro-hist-head"></thead><tbody id="micro-hist-body"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal eliminar -->
+  <div class="modal-overlay" id="micro-del-modal" onclick="handleOverlayClick(event,'micro-del-modal')">
+    <div class="modal-box" style="max-width:320px;text-align:center">
+      <div style="font-size:28px;margin-bottom:10px">🗑️</div>
+      <p style="font-size:15px;font-weight:700;margin-bottom:6px">¿Eliminar registro?</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Esta acción no se puede deshacer.</p>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-danger btn-full" onclick="microConfirmDelete()">Eliminar</button>
+        <button class="btn btn-ghost btn-full" onclick="closeModal('micro-del-modal')">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+</section>
+
 <!-- ── BARRA NAVEGACIÓN INFERIOR ── -->
 <nav class="bottom-nav">
   <button class="nav-item active" data-section="macro"     onclick="switchSection('macro')">
@@ -1619,6 +1755,10 @@
   <button class="nav-item"        data-section="gastos"    onclick="switchSection('gastos')">
     <span class="nav-icon">💸</span>
     <span>Gastos</span>
+  </button>
+  <button class="nav-item"        data-section="micro"     onclick="switchSection('micro')">
+    <span class="nav-icon">🏘️</span>
+    <span>Micro</span>
   </button>
 </nav>
 
@@ -1704,6 +1844,7 @@ function buildDefaultState() {
       expenses: [],
       inflation: {},
     },
+    micro: { entries: [] },
   };
 }
 
@@ -1767,6 +1908,7 @@ const SECTION_META = {
   portfolio: { title: 'Portafolio',  subtitle: 'Inversiones en ARS y USD',    emoji: '💼', color: 'var(--port)'  },
   hodler:    { title: 'Hodler',      subtitle: 'DCA · Bots · Crypto',         emoji: '₿',  color: 'var(--hodl)'  },
   gastos:    { title: 'Gastos',      subtitle: 'Ingresos y egresos del mes',  emoji: '💸', color: 'var(--gastos)'},
+  micro:     { title: 'Micro AR',    subtitle: 'Canastas · Salarios · Sectorial', emoji: '🏘️', color: 'var(--micro)' },
 };
 
 let _activeSection = 'macro';
@@ -1853,36 +1995,132 @@ function importAll(e) {
    MÓDULO: MACRO AR
 ═══════════════════════════════════════════════════════════ */
 const MACRO_INDICATORS = [
-  { id:'inflacion',         label:'Inflación mensual',                              unit:'%',      color:'#f97316', dec:2,  min:-20,    max:100    },
-  { id:'dolar_of',         label:'Dólar oficial',                                  unit:'ARS',    color:'#60a5fa', dec:2,  min:0.01,   max:1e6    },
-  { id:'dolar_blue',       label:'Dólar blue',                                     unit:'ARS',    color:'#34d399', dec:2,  min:0.01,   max:1e6    },
-  { id:'dolar_mep',        label:'Dólar MEP',                                      unit:'ARS',    color:'#a78bfa', dec:2,  min:0.01,   max:1e6    },
-  { id:'riesgo_pais',      label:'Riesgo país',                                    unit:'bps',    color:'#fb7185', dec:0,  min:0,      max:20000  },
-  { id:'tasa_bcra',        label:'Tasa BCRA',                                      unit:'% TNA',  color:'#fbbf24', dec:2,  min:0,      max:300    },
-  { id:'tcrm',             label:'TCRM (BCRA)',                                    unit:'',       color:'#22d3ee', dec:2,  min:0,      max:1000   },
-  { id:'reservas',         label:'Reservas brutas BCRA',                           unit:'USD M',  color:'#4ade80', dec:0,  min:-1e5,   max:2e5    },
-  { id:'emae',             label:'Actividad (EMAE) var. interanual',               unit:'%',      color:'#38bdf8', dec:1,  min:-30,    max:30     },
-  { id:'emae_mensual',     label:'Actividad (EMAE) var. mensual s.a.',             unit:'%',      color:'#0ea5e9', dec:1,  min:-10,    max:10     },
-  { id:'balanza_comercial',label:'Balanza comercial',                              unit:'USD M',  color:'#f472b6', dec:0,  min:-50000, max:50000  },
-  { id:'m2',               label:'M2 priv. transaccional var. mensual real s.e.',  unit:'%',      color:'#c084fc', dec:2,  min:-20,    max:50     },
-  { id:'resultado_primario',   label:'Resultado primario del Estado', unit:'ARS M', color:'#86efac', dec:0, min:-1e8, max:1e8,
-    hint:'Ingresá el dato en millones de pesos. Positivo = superávit (el Estado gastó menos de lo que recaudó). Negativo = déficit (gastó más de lo que recaudó). Este número NO incluye lo que el Estado pagó en intereses de su deuda.' },
-  { id:'resultado_financiero', label:'Resultado financiero del Estado', unit:'ARS M', color:'#fca5a5', dec:0, min:-1e8, max:1e8,
-    hint:'Igual que el resultado primario pero SÍ incluye los intereses de la deuda. Es el número que refleja la verdadera situación de las cuentas del Estado.' },
+  { id:'inflacion',
+    label:'Inflación del mes — ¿cuánto subieron los precios este mes?',
+    unit:'%', color:'#f97316', dec:2, min:-20, max:100,
+    hint:'El porcentaje en que subieron los precios en promedio durante el mes. Si fue 4%, significa que lo que antes costaba $100 ahora cuesta $104.' },
+
+  { id:'dolar_of',
+    label:'Dólar oficial — cotización del Banco Nación',
+    unit:'ARS', color:'#60a5fa', dec:2, min:0.01, max:1e6,
+    hint:'El precio del dólar que fija el Banco Central. Es el que se usa para importaciones, exportaciones y operaciones formales.' },
+
+  { id:'dolar_blue',
+    label:'Dólar blue — precio en el mercado informal',
+    unit:'ARS', color:'#34d399', dec:2, min:0.01, max:1e6,
+    hint:'El precio del dólar en el mercado paralelo o "cueva". No es legal comprarlo así, pero refleja la demanda real de dólares de la gente.' },
+
+  { id:'dolar_mep',
+    label:'Dólar MEP (Bolsa) — compra legal a través de la Bolsa',
+    unit:'ARS', color:'#a78bfa', dec:2, min:0.01, max:1e6,
+    hint:'El precio del dólar que se obtiene comprando y vendiendo bonos en pesos y en dólares a través de la Bolsa. Es una forma legal de dolarizarse.' },
+
+  { id:'riesgo_pais',
+    label:'Riesgo país — ¿cuánto desconfía el mundo de la Argentina?',
+    unit:'puntos básicos', color:'#fb7185', dec:0, min:0, max:20000,
+    hint:'Mide cuánto extra tiene que pagar Argentina para pedir dinero prestado en el exterior comparado con EE.UU. Más alto = más desconfianza = más caro endeudarse. Por encima de 1000 puntos se considera riesgo muy alto.' },
+
+  { id:'tasa_bcra',
+    label:'Tasa de interés del Banco Central (BCRA) — tasa de política monetaria',
+    unit:'% anual', color:'#fbbf24', dec:2, min:0, max:300,
+    hint:'La tasa de interés que fija el Banco Central. Define el piso de las tasas del sistema financiero: plazos fijos, préstamos, etc. Si es menor que la inflación, conviene gastar en vez de ahorrar en pesos.' },
+
+  { id:'tcrm',
+    label:'Tipo de cambio real multilateral (TCRM) — ¿qué tan caro o barato está el dólar oficial?',
+    unit:'índice', color:'#22d3ee', dec:2, min:0, max:1000,
+    hint:'Mide si el dólar oficial está "atrasado" o no. Compara el precio del dólar con la inflación de Argentina y de sus socios comerciales. Valores altos = dólar caro (competitividad exportadora). Valores bajos = dólar barato (riesgo de atraso cambiario).' },
+
+  { id:'reservas',
+    label:'Reservas del Banco Central — los dólares que tiene el Estado',
+    unit:'millones de USD', color:'#4ade80', dec:0, min:-1e5, max:2e5,
+    hint:'El stock de dólares (y otros activos) que tiene el Banco Central en caja. Son la principal defensa ante una crisis cambiaria. Pueden ser negativas si el BCRA tiene deudas en dólares mayores a sus activos.' },
+
+  { id:'emae',
+    label:'Actividad económica (EMAE) — ¿la economía creció o cayó respecto al año pasado?',
+    unit:'% vs. mismo mes del año anterior', color:'#38bdf8', dec:1, min:-30, max:30,
+    hint:'Variación interanual del Estimador Mensual de Actividad Económica (EMAE) del INDEC. Positivo = la economía produce más que hace un año. Negativo = produce menos (recesión).' },
+
+  { id:'emae_mensual',
+    label:'Actividad económica (EMAE) — ¿cómo le fue a la economía este mes respecto al mes anterior?',
+    unit:'% vs. mes anterior (sin estacionalidad)', color:'#0ea5e9', dec:1, min:-10, max:10,
+    hint:'Variación mensual desestacionalizada. Filtra el efecto de las temporadas (verano, invierno, etc.) para ver la tendencia real mes a mes.' },
+
+  { id:'balanza_comercial',
+    label:'Balanza comercial — ¿exportamos más de lo que importamos?',
+    unit:'millones de USD', color:'#f472b6', dec:0, min:-50000, max:50000,
+    hint:'Exportaciones menos importaciones. Positivo = superávit comercial (entra más plata de la que sale). Negativo = déficit comercial (sale más de lo que entra). Es una de las principales fuentes de dólares del país.' },
+
+  { id:'m2',
+    label:'Dinero en circulación (M2 privado) — ¿cuánto creció la cantidad de pesos en la economía?',
+    unit:'% mensual real (sin inflación ni estacionalidad)', color:'#c084fc', dec:2, min:-20, max:50,
+    hint:'Variación mensual real de los pesos privados en circulación (billetes, depósitos a la vista). Si crece mucho más que la actividad, es una señal de presión inflacionaria futura.' },
+
+  { id:'resultado_primario',
+    label:'Resultado primario del Estado — ¿el Estado gastó más o menos de lo que recaudó? (sin contar intereses de deuda)',
+    unit:'millones de ARS', color:'#86efac', dec:0, min:-1e8, max:1e8,
+    hint:'Ingresá el dato en millones de pesos. Positivo = superávit (el Estado recaudó más de lo que gastó, sin contar lo que pagó de intereses de su deuda). Negativo = déficit (gastó más de lo que recaudó). Es el indicador de disciplina fiscal más seguido por los mercados.' },
+
+  { id:'resultado_financiero',
+    label:'Resultado financiero del Estado — situación fiscal real incluyendo el pago de intereses de la deuda',
+    unit:'millones de ARS', color:'#fca5a5', dec:0, min:-1e8, max:1e8,
+    hint:'Igual que el resultado primario pero SÍ incluye los intereses que el Estado pagó por su deuda. Es el número que refleja si Argentina realmente vive dentro de sus posibilidades o sigue endeudándose. Positivo = superávit financiero. Negativo = déficit financiero.' },
 ];
 
 const MACRO_DERIVED = [
-  { id:'inflacion_ia',          label:'Inflación interanual',                           unit:'%',     color:'#fb923c', dec:2 },
-  { id:'inflacion_acum',        label:'Inflación acum. anual',                          unit:'%',     color:'#fdba74', dec:2 },
-  { id:'brecha',                label:'Brecha cambiaria (blue)',                        unit:'%',     color:'#2dd4bf', dec:2 },
-  { id:'brecha_mep',            label:'Brecha cambiaria (MEP)',                         unit:'%',     color:'#5eead4', dec:2 },
-  { id:'tasa_real',             label:'Tasa real mensual',                              unit:'%',     color:'#facc15', dec:2 },
-  { id:'dolar_of_ia',           label:'Devaluación interanual (oficial)',               unit:'%',     color:'#3b82f6', dec:2 },
-  { id:'dolar_blue_ia',         label:'Devaluación interanual (blue)',                  unit:'%',     color:'#10b981', dec:2 },
-  { id:'dolar_mep_ia',          label:'Devaluación interanual (MEP)',                   unit:'%',     color:'#8b5cf6', dec:2 },
-  { id:'m2_ia',                 label:'M2 priv. var. interanual real',                  unit:'%',     color:'#a855f7', dec:2 },
-  { id:'resultado_primario_12m',    label:'Resultado primario — suma de los últimos 12 meses',    unit:'ARS M', color:'#4ade80', dec:0 },
-  { id:'resultado_financiero_12m',  label:'Resultado financiero — suma de los últimos 12 meses',  unit:'ARS M', color:'#f87171', dec:0 },
+  { id:'inflacion_ia',
+    label:'Inflación acumulada en los últimos 12 meses',
+    unit:'%', color:'#fb923c', dec:2,
+    hint:'Cuánto subieron los precios en el último año completo. Se calcula encadenando los 12 meses anteriores.' },
+
+  { id:'inflacion_acum',
+    label:'Inflación acumulada en lo que va del año',
+    unit:'%', color:'#fdba74', dec:2,
+    hint:'Cuánto subieron los precios desde enero hasta el mes actual. Resetea cada 1° de enero.' },
+
+  { id:'brecha',
+    label:'Brecha cambiaria con el dólar blue — diferencia entre el blue y el oficial',
+    unit:'%', color:'#2dd4bf', dec:2,
+    hint:'Cuánto más caro está el dólar blue respecto al oficial. Una brecha del 30% significa que el blue vale 30% más que el oficial. Brechas altas indican desconfianza en la política cambiaria.' },
+
+  { id:'brecha_mep',
+    label:'Brecha cambiaria con el dólar MEP — diferencia entre el MEP y el oficial',
+    unit:'%', color:'#5eead4', dec:2,
+    hint:'Cuánto más caro está el dólar MEP (Bolsa) respecto al oficial. Al ser una operación legal, la brecha MEP suele ser menor a la brecha blue.' },
+
+  { id:'tasa_real',
+    label:'Tasa de interés real mensual — ¿el plazo fijo le gana a la inflación?',
+    unit:'% mensual', color:'#facc15', dec:2,
+    hint:'La tasa del Banco Central menos la inflación del mes (fórmula de Fisher). Positiva = el plazo fijo rinde más que la inflación y conviene ahorrar en pesos. Negativa = la inflación se come el rendimiento y perdés poder de compra.' },
+
+  { id:'dolar_of_ia',
+    label:'Devaluación del dólar oficial en el último año',
+    unit:'%', color:'#3b82f6', dec:2,
+    hint:'Cuánto subió el dólar oficial en los últimos 12 meses. Si es menor que la inflación, el dólar oficial se está "atrasando".' },
+
+  { id:'dolar_blue_ia',
+    label:'Devaluación del dólar blue en el último año',
+    unit:'%', color:'#10b981', dec:2,
+    hint:'Cuánto subió el dólar blue en los últimos 12 meses.' },
+
+  { id:'dolar_mep_ia',
+    label:'Devaluación del dólar MEP en el último año',
+    unit:'%', color:'#8b5cf6', dec:2,
+    hint:'Cuánto subió el dólar MEP (Bolsa) en los últimos 12 meses.' },
+
+  { id:'m2_ia',
+    label:'Crecimiento del dinero en circulación en el último año (real, sin inflación)',
+    unit:'%', color:'#a855f7', dec:2,
+    hint:'Cuánto creció la cantidad de pesos en la economía en los últimos 12 meses, descontando la inflación. Si crece mucho, puede ser señal de futura presión sobre los precios o el dólar.' },
+
+  { id:'resultado_primario_12m',
+    label:'Resultado primario acumulado — suma de los últimos 12 meses (sin intereses de deuda)',
+    unit:'millones de ARS', color:'#4ade80', dec:0,
+    hint:'La suma de los resultados primarios de los últimos 12 meses. Elimina el ruido mes a mes y muestra la tendencia fiscal real del Estado.' },
+
+  { id:'resultado_financiero_12m',
+    label:'Resultado financiero acumulado — suma de los últimos 12 meses (con intereses de deuda)',
+    unit:'millones de ARS', color:'#f87171', dec:0,
+    hint:'La suma de los resultados financieros de los últimos 12 meses. Indica si Argentina está reduciendo o aumentando su deuda en términos reales.' },
 ];
 
 const MACRO_RANGE_OPTS = [
@@ -4316,6 +4554,400 @@ if (GS().inflation?.[_gastInflKey] != null)
 gastBuildYearSelect();
 gastRenderAll();
 window.addEventListener('resize', ()=>{ if(document.getElementById('section-gastos').classList.contains('active')) gastRenderMonthly(); });
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: MICRO AR
+═══════════════════════════════════════════════════════════ */
+const MICRO_INDICATORS = [
+  { id:'cba',   label:'CBA — Canasta Básica Alimentaria (hogar tipo)',
+    unit:'ARS', color:'#fb923c', dec:0, min:0, max:1e8,
+    hint:'Valor mensual en pesos de la canasta mínima de alimentos para una familia de 4 personas (2 adultos y 2 menores). Si el ingreso familiar es menor a este valor, el hogar es indigente.' },
+  { id:'cbt',   label:'CBT — Canasta Básica Total / umbral de pobreza (hogar tipo)',
+    unit:'ARS', color:'#f59e0b', dec:0, min:0, max:1e8,
+    hint:'Valor mensual en pesos de la canasta completa (alimentos + servicios + vestimenta + transporte) para una familia de 4 personas. Si el ingreso familiar es menor a este valor, el hogar es pobre.' },
+  { id:'ripte', label:'RIPTE — Salario promedio de trabajadores formales',
+    unit:'ARS', color:'#4ade80', dec:0, min:0, max:1e8,
+    hint:'Remuneración Imponible Promedio de los Trabajadores Estables. Es el salario bruto promedio de los empleados formales privados registrados. Lo publica el Ministerio de Trabajo cada mes.' },
+  { id:'acara', label:'ACARA — Patentamientos de autos 0km',
+    unit:'unidades', color:'#38bdf8', dec:0, min:0, max:200000,
+    hint:'Cantidad de autos 0km patentados durante el mes en todo el país. Es un indicador adelantado del consumo y del crédito. Cuando cae mucho, suele anticipar una recesión.' },
+  { id:'afcp',  label:'AFCP — Despachos de cemento',
+    unit:'miles de toneladas', color:'#a78bfa', dec:1, min:0, max:2000,
+    hint:'Toneladas de cemento despachadas al mercado interno durante el mes (en miles), publicado por la Asociación de Fabricantes de Cemento Portland. Es el mejor indicador mensual de la actividad en construcción.' },
+];
+
+const MICRO_DERIVED = [
+  { id:'cba_var',           label:'CBA — Variación mensual',                              unit:'%',   color:'#fdba74', dec:2 },
+  { id:'cbt_var',           label:'CBT — Variación mensual',                              unit:'%',   color:'#fcd34d', dec:2 },
+  { id:'cba_ia',            label:'CBA — Variación interanual',                           unit:'%',   color:'#f97316', dec:2 },
+  { id:'cbt_ia',            label:'CBT — Variación interanual',                           unit:'%',   color:'#f59e0b', dec:2 },
+  { id:'ripte_ia',          label:'RIPTE — Variación interanual',                         unit:'%',   color:'#86efac', dec:2 },
+  { id:'ripte_real',        label:'RIPTE real — Salario ajustado por inflación (base: primer registro)', unit:'índice', color:'#34d399', dec:2 },
+  { id:'poder_adquisitivo', label:'Poder adquisitivo — ¿cuántas CBT cubre el RIPTE?',    unit:'veces', color:'#22d3ee', dec:2 },
+  { id:'acara_ia',          label:'ACARA — Variación interanual',                         unit:'%',   color:'#7dd3fc', dec:2 },
+  { id:'afcp_ia',           label:'AFCP — Variación interanual',                          unit:'%',   color:'#c4b5fd', dec:2 },
+];
+
+const MICRO_RANGE_OPTS = [
+  { id:'3m', label:'3M', months:3 },
+  { id:'6m', label:'6M', months:6 },
+  { id:'1a', label:'1A', months:12 },
+  { id:'todo', label:'Todo', months:null },
+];
+
+const MIS = () => STATE.micro;
+const microSave = () => saveState();
+
+let _microActiveTab   = 'mdash';
+let _microActiveChart = 'poder_adquisitivo';
+let _microActiveRange = 'todo';
+let _microEditId      = null;
+let _microDeleteTarget= null;
+let _microChartInst   = null;
+
+/* ── Helpers ── */
+function microEntries() { return MIS().entries || []; }
+function microSorted()  { return [...microEntries()].sort((a,b)=>a.fecha.localeCompare(b.fecha)); }
+function microGetInd(id){ return MICRO_INDICATORS.find(i=>i.id===id)||MICRO_DERIVED.find(i=>i.id===id); }
+function microFmtVal(val,unit,dec){
+  if(val===''||val==null||isNaN(Number(val))) return null;
+  const n=Number(val);
+  const f=n.toLocaleString('es-AR',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+  return unit?`${f} ${unit}`:f;
+}
+function microN(e,k){ return (e[k]!==''&&e[k]!=null&&!isNaN(Number(e[k])))?Number(e[k]):null; }
+
+/* ── Cálculo de derivados ── */
+function microWithDerived(){
+  const sorted = microSorted();
+  if(!sorted.length) return [];
+
+  // Mapas por fecha
+  const cbaMap={}, cbtMap={}, ripteMap={}, acaraMap={}, afcpMap={};
+  sorted.forEach(e=>{
+    cbaMap[e.fecha]   = microN(e,'cba');
+    cbtMap[e.fecha]   = microN(e,'cbt');
+    ripteMap[e.fecha] = microN(e,'ripte');
+    acaraMap[e.fecha] = microN(e,'acara');
+    afcpMap[e.fecha]  = microN(e,'afcp');
+  });
+
+  // Base para RIPTE real: valor del primer registro con dato
+  const ripteBase = sorted.find(e=>microN(e,'ripte')!=null);
+  const ripteBaseVal = ripteBase ? microN(ripteBase,'ripte') : null;
+
+  // Inflación del Portafolio (si está cargada) para RIPTE real
+  const inflMap = STATE.portfolio?.inflation || {};
+  function deflactor(fecha){
+    // producto acumulado de (1 + inflación/100) desde fecha hasta hoy
+    // si no hay dato de inflación, devuelve null
+    const [y,m] = fecha.split('-').map(Number);
+    let f=1, cm=m, cy=y, steps=0;
+    while(!(cy===new Date().getFullYear()&&cm===(new Date().getMonth()+1))&&steps<240){
+      cm++; if(cm>12){cm=1;cy++;}
+      const k=`${cy}-${String(cm).padStart(2,'0')}`;
+      const ipc=inflMap[k];
+      if(!ipc) return null;
+      f*=(1+ipc.pct/100);
+      steps++;
+    }
+    return f;
+  }
+
+  function varMensual(map, fecha){
+    const [y,m] = fecha.split('-').map(Number);
+    const d = new Date(y,m-1,1); d.setMonth(d.getMonth()-1);
+    const prev = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const cur=map[fecha], prevVal=map[prev];
+    if(cur==null||prevVal==null||prevVal===0) return '';
+    return (cur/prevVal-1)*100;
+  }
+
+  function varInteranual(map, fecha){
+    const [y,m] = fecha.split('-');
+    const prev = `${Number(y)-1}-${m}`;
+    const cur=map[fecha], prevVal=map[prev];
+    if(cur==null||prevVal==null||prevVal===0) return '';
+    return (cur/prevVal-1)*100;
+  }
+
+  return sorted.map(e=>{
+    const cba   = cbaMap[e.fecha];
+    const cbt   = cbtMap[e.fecha];
+    const ripte = ripteMap[e.fecha];
+
+    // Poder adquisitivo: cuántas CBT cubre el RIPTE
+    const poder_adquisitivo = (ripte!=null&&cbt!=null&&cbt>0) ? ripte/cbt : '';
+
+    // RIPTE real: índice base 100 al primer dato, ajustado por IPC
+    let ripte_real = '';
+    if(ripte!=null&&ripteBaseVal!=null&&ripteBaseVal>0){
+      // nominal relativo a la base
+      const nomIdx = ripte/ripteBaseVal;
+      // deflactar desde el primer registro hasta esta fecha
+      const def = deflactor(ripteBase.fecha);
+      const defCur = deflactor(e.fecha) || 1;
+      // ripte real = índice nominal / acumulación de inflación
+      ripte_real = def!=null ? (nomIdx/(defCur/def))*100 : '';
+    }
+
+    return {
+      ...e,
+      cba_var:           varMensual(cbaMap,   e.fecha),
+      cbt_var:           varMensual(cbtMap,   e.fecha),
+      cba_ia:            varInteranual(cbaMap,   e.fecha),
+      cbt_ia:            varInteranual(cbtMap,   e.fecha),
+      ripte_ia:          varInteranual(ripteMap, e.fecha),
+      ripte_real,
+      poder_adquisitivo,
+      acara_ia:          varInteranual(acaraMap, e.fecha),
+      afcp_ia:           varInteranual(afcpMap,  e.fecha),
+    };
+  });
+}
+
+/* ── Sub-nav ── */
+function microTab(name, btn){
+  _microActiveTab=name;
+  document.querySelectorAll('.micro-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('micro-'+name).classList.add('active');
+  document.querySelectorAll('.micro-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if(name==='mgraficos')  { microRenderRangeBtns(); microRenderChart(); }
+  if(name==='mhistorial') microRenderHistorial();
+  if(name==='mdash')      microRenderDash();
+}
+
+/* ── Dashboard ── */
+function microRenderDash(){
+  const entries = microEntries();
+  const empty   = document.getElementById('micro-dash-empty');
+  const content = document.getElementById('micro-dash-content');
+  if(!entries.length){
+    empty.style.display='block'; content.style.display='none'; return;
+  }
+  empty.style.display='none'; content.style.display='block';
+
+  const derived = microWithDerived();
+  const allInds = [...MICRO_INDICATORS,...MICRO_DERIVED];
+  document.getElementById('micro-cards').innerHTML = allInds.map(ind=>{
+    const last=[...derived].reverse().find(e=>e[ind.id]!==''&&e[ind.id]!=null);
+    const val=last?microFmtVal(last[ind.id],ind.unit,ind.dec):null;
+    // Badge poder adquisitivo
+    let badge='';
+    if(ind.id==='poder_adquisitivo'&&last&&val){
+      const n=Number(last[ind.id]);
+      const color=n>=1?'var(--ok)':'var(--danger)';
+      const txt=n>=1?`Cubre la canasta (${n.toFixed(2)}x)`:`No llega a la canasta (${n.toFixed(2)}x)`;
+      badge=`<div class="micro-card-sub" style="color:${color};font-weight:700">${txt}</div>`;
+    }
+    return `<div class="micro-card" style="border-left-color:${ind.color}">
+      <div class="micro-card-label">${ind.label}</div>
+      <div class="micro-card-value" style="color:${ind.color}">${val??'—'}</div>
+      ${badge}
+      ${last?`<div class="micro-card-date">${last.fecha}</div>`:''}
+    </div>`;
+  }).join('');
+
+  const n=entries.length;
+  document.getElementById('micro-entry-count').textContent=
+    `${n} registro${n!==1?'s':''} cargado${n!==1?'s':''}.`;
+}
+
+/* ── Formulario ── */
+function microBuildInputs(){
+  document.getElementById('micro-inputs').innerHTML = MICRO_INDICATORS.map(ind=>`
+    <div class="form-group" style="margin-bottom:0">
+      <label>${ind.label.split('—')[0].trim()} <span style="color:var(--dimmed)">(${ind.unit})</span></label>
+      <input type="number" step="any" ${ind.min>=0?`min="${ind.min}"`:''}
+        max="${ind.max}" placeholder="—" id="micf-${ind.id}" class="input">
+      ${ind.hint?`<p style="font-size:10px;color:var(--muted);margin-top:3px">${ind.hint}</p>`:''}
+    </div>`).join('');
+}
+
+function microClearForm(){
+  document.getElementById('micf-fecha').value='';
+  MICRO_INDICATORS.forEach(i=>{ const el=document.getElementById('micf-'+i.id); if(el) el.value=''; });
+}
+
+function microCancelEdit(){
+  _microEditId=null;
+  microClearForm();
+  document.getElementById('micro-form-title').textContent='Nuevo registro';
+  document.getElementById('micro-cancel-btn').style.display='none';
+}
+
+function microStartEdit(id){
+  const e=microEntries().find(x=>x.id===id); if(!e) return;
+  _microEditId=id;
+  document.getElementById('micf-fecha').value=e.fecha;
+  MICRO_INDICATORS.forEach(i=>{ const el=document.getElementById('micf-'+i.id); if(el) el.value=e[i.id]??''; });
+  document.getElementById('micro-form-title').textContent='Editar registro';
+  document.getElementById('micro-cancel-btn').style.display='inline-flex';
+  document.querySelector('.micro-tab[data-tab="mcargar"]').click();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function microSubmit(){
+  const fecha=document.getElementById('micf-fecha').value;
+  if(!fecha){showToast('Ingresá una fecha','err');return;}
+  const record={fecha, id:_microEditId??Date.now()};
+  let hasValue=false;
+  for(const ind of MICRO_INDICATORS){
+    const raw=document.getElementById('micf-'+ind.id)?.value??'';
+    if(raw===''){record[ind.id]='';continue;}
+    const n=Number(raw);
+    if(isNaN(n)){showToast(`"${ind.label.split('—')[0].trim()}" no es válido`,'err');return;}
+    if(ind.min>=0&&n<ind.min){showToast(`"${ind.label.split('—')[0].trim()}" no puede ser negativo`,'err');return;}
+    if(n>ind.max){showToast(`"${ind.label.split('—')[0].trim()}" fuera de rango`,'err');return;}
+    record[ind.id]=raw; hasValue=true;
+  }
+  if(!hasValue){showToast('Ingresá al menos un valor','err');return;}
+  if(_microEditId!==null){
+    MIS().entries=microEntries().map(e=>e.id===_microEditId?record:e);
+    _microEditId=null;
+    document.getElementById('micro-form-title').textContent='Nuevo registro';
+    document.getElementById('micro-cancel-btn').style.display='none';
+    showToast('Registro actualizado','ok');
+  }else{
+    if(microEntries().find(e=>e.fecha===fecha)){showToast('Ya existe un registro para ese mes','err');return;}
+    if(!MIS().entries) MIS().entries=[];
+    MIS().entries.push(record);
+    showToast('Registro guardado','ok');
+  }
+  microSave(); microClearForm(); microRenderDash();
+}
+
+/* ── Historial ── */
+function microRenderHistorial(){
+  const entries=microEntries();
+  const empty=document.getElementById('micro-hist-empty');
+  const wrap=document.getElementById('micro-hist-wrap');
+  if(!entries.length){empty.style.display='block';wrap.style.display='none';return;}
+  empty.style.display='none';wrap.style.display='block';
+
+  document.getElementById('micro-hist-head').innerHTML=`<tr>
+    <th>Fecha</th>
+    ${MICRO_INDICATORS.map(i=>`<th>${i.label.split('—')[0].trim()}</th>`).join('')}
+    ${MICRO_DERIVED.map(i=>`<th>${i.label.split('—')[0].trim()}</th>`).join('')}
+    <th></th></tr>`;
+
+  const rows=[...microWithDerived()].reverse();
+  document.getElementById('micro-hist-body').innerHTML=rows.map(e=>`
+    <tr>
+      <td style="font-weight:700;color:var(--micro);font-family:var(--mono)">${e.fecha}</td>
+      ${MICRO_INDICATORS.map(i=>{
+        const v=microFmtVal(e[i.id],i.unit,i.dec);
+        return `<td>${v?`<span style="color:${i.color}">${v}</span>`:'<span style="color:var(--dimmed)">—</span>'}</td>`;
+      }).join('')}
+      ${MICRO_DERIVED.map(i=>{
+        const v=microFmtVal(e[i.id],i.unit,i.dec);
+        return `<td>${v?`<span style="color:${i.color}">${v}</span>`:'<span style="color:var(--dimmed)">—</span>'}</td>`;
+      }).join('')}
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost btn-sm" onclick="microStartEdit(${e.id})">✏️</button>
+          <button class="btn btn-sm" style="background:#3b1219;color:var(--danger)" onclick="microAskDelete(${e.id})">🗑️</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+/* ── Eliminar ── */
+function microAskDelete(id){ _microDeleteTarget=id; openModal('micro-del-modal'); }
+function microConfirmDelete(){
+  if(_microDeleteTarget==null) return;
+  MIS().entries=microEntries().filter(e=>e.id!==_microDeleteTarget);
+  microSave(); _microDeleteTarget=null;
+  closeModal('micro-del-modal');
+  showToast('Registro eliminado','ok');
+  microRenderHistorial(); microRenderDash();
+}
+
+/* ── Gráfico ── */
+function microRenderRangeBtns(){
+  document.getElementById('micro-range-btns').innerHTML=MICRO_RANGE_OPTS.map(r=>`
+    <button class="micro-range-btn${_microActiveRange===r.id?' active':''}"
+      onclick="microSelectRange('${r.id}')">${r.label}</button>`).join('');
+}
+
+function microSelectRange(id){
+  _microActiveRange=id; microRenderRangeBtns(); microRenderChart();
+}
+
+function microFilterByRange(arr){
+  const opt=MICRO_RANGE_OPTS.find(r=>r.id===_microActiveRange);
+  if(!opt||opt.months===null) return arr;
+  const sorted=microSorted();
+  if(!sorted.length) return arr;
+  const last=sorted[sorted.length-1].fecha;
+  const [y,m]=last.split('-').map(Number);
+  const d=new Date(y,m-1,1); d.setMonth(d.getMonth()-(opt.months-1));
+  const from=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  return arr.filter(e=>e.fecha>=from);
+}
+
+function microSelectChart(id){ _microActiveChart=id; microRenderChart(); }
+
+function microSyncChartSelect(){
+  const sel=document.getElementById('micro-chart-select');
+  if(sel) sel.value=_microActiveChart;
+}
+
+function microRenderChart(){
+  const ind=microGetInd(_microActiveChart);
+  if(!ind) return;
+  const data=microFilterByRange(microWithDerived())
+    .filter(e=>e[_microActiveChart]!==''&&e[_microActiveChart]!=null)
+    .map(e=>({x:e.fecha,y:Number(e[_microActiveChart])}));
+
+  const empty=document.getElementById('micro-chart-empty');
+  const wrap=document.getElementById('micro-chart-wrap');
+  const leg=document.getElementById('micro-chart-legend');
+
+  if(data.length<2){
+    empty.style.display='block';wrap.style.display='none';leg.textContent='';return;
+  }
+  empty.style.display='none';wrap.style.display='block';
+  leg.textContent=`${ind.label.split('—')[0].trim()} — ${ind.unit}`;
+
+  if(_microChartInst) _microChartInst.destroy();
+  const ctx=document.getElementById('micro-chart').getContext('2d');
+  _microChartInst=new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:data.map(d=>d.x),
+      datasets:[{
+        label:ind.label,data:data.map(d=>d.y),
+        borderColor:ind.color,backgroundColor:ind.color+'22',
+        borderWidth:2.5,pointRadius:4,pointHoverRadius:6,
+        pointBackgroundColor:ind.color,tension:0.3,fill:true,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#191c26',borderColor:'#252936',borderWidth:1,
+          titleColor:'#e8eaf2',bodyColor:ind.color,
+          callbacks:{label:ctx=>microFmtVal(ctx.raw,ind.unit,ind.dec)??''}
+        }
+      },
+      scales:{
+        x:{ticks:{color:'#5a6080',font:{size:10}},grid:{color:'#252936'}},
+        y:{ticks:{color:'#5a6080',font:{size:10},callback:v=>v.toLocaleString('es-AR')},grid:{color:'#252936'}}
+      }
+    }
+  });
+}
+
+/* ── Init ── */
+function onmicroEnter(){ microRenderDash(); }
+
+microBuildInputs();
+microRenderDash();
 
 /* ─── PWA: REGISTRAR SERVICE WORKER ──────────────────────── */
 if ('serviceWorker' in navigator) {
