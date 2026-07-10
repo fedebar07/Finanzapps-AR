@@ -4617,7 +4617,7 @@ const MICRO_DERIVED = [
   { id:'cba_ia',            label:'CBA — Variación interanual',                           unit:'%',   color:'#f97316', dec:2 },
   { id:'cbt_ia',            label:'CBT — Variación interanual',                           unit:'%',   color:'#f59e0b', dec:2 },
   { id:'ripte_ia',          label:'RIPTE — Variación interanual',                         unit:'%',   color:'#86efac', dec:2 },
-  { id:'ripte_real',        label:'RIPTE real — Salario ajustado por inflación (base: primer registro)', unit:'índice', color:'#34d399', dec:2 },
+  { id:'ripte_real',        label:'RIPTE real — Salario ajustado por inflación (base 100 = primer registro cargado)', unit:'índice', color:'#34d399', dec:2 },
   { id:'poder_adquisitivo', label:'Poder adquisitivo — ¿cuántas CBT cubre el RIPTE?',    unit:'veces', color:'#22d3ee', dec:2 },
   { id:'acara_ia',          label:'ACARA — Variación interanual',                         unit:'%',   color:'#7dd3fc', dec:2 },
   { id:'afcp_ia',           label:'AFCP — Variación interanual',                          unit:'%',   color:'#c4b5fd', dec:2 },
@@ -4667,23 +4667,34 @@ function microWithDerived(){
     afcpMap[e.fecha]  = microN(e,'afcp');
   });
 
-  // Base para RIPTE real: valor del primer registro con dato
+  // Base para RIPTE real: valor del primer registro con dato de RIPTE
   const ripteBase = sorted.find(e=>microN(e,'ripte')!=null);
   const ripteBaseVal = ripteBase ? microN(ripteBase,'ripte') : null;
+  const ripteBaseFecha = ripteBase ? ripteBase.fecha : null;
 
-  // Inflación del Portafolio (si está cargada) para RIPTE real
-  const inflMap = STATE.portfolio?.inflation || {};
-  function deflactor(fecha){
-    // producto acumulado de (1 + inflación/100) desde fecha hasta hoy
-    // si no hay dato de inflación, devuelve null
-    const [y,m] = fecha.split('-').map(Number);
-    let f=1, cm=m, cy=y, steps=0;
-    while(!(cy===new Date().getFullYear()&&cm===(new Date().getMonth()+1))&&steps<240){
+  // Inflación cargada en Portafolio (mapa fecha -> % mensual)
+  // Inflación mensual cargada en Macro AR (fuente: cada entry.inflacion)
+  const inflMap = {};
+  (STATE.macro?.entries || []).forEach(e => {
+    const pct = (e.inflacion !== '' && e.inflacion != null && !isNaN(Number(e.inflacion)))
+      ? Number(e.inflacion) : null;
+    if (pct != null) inflMap[e.fecha] = { pct };
+  });
+
+  // Deflactor ENTRE dos fechas específicas (no hasta "hoy"), y no exige
+  // la cadena completa: los meses sin dato de inflación (cargada en Macro AR)
+  // se toman como 0% (mejor una aproximación que perder todo el indicador).
+  function deflactorEntre(fechaDesde, fechaHasta){
+    if(fechaDesde===fechaHasta) return 1;
+    const [y0,m0]=fechaDesde.split('-').map(Number);
+    const [y1,m1]=fechaHasta.split('-').map(Number);
+    let f=1, cm=m0, cy=y0, steps=0;
+    const maxSteps=240;
+    while(!(cy===y1&&cm===m1)&&steps<maxSteps){
       cm++; if(cm>12){cm=1;cy++;}
       const k=`${cy}-${String(cm).padStart(2,'0')}`;
-      const ipc=inflMap[k];
-      if(!ipc) return null;
-      f*=(1+ipc.pct/100);
+      const pct = inflMap[k]?.pct ?? 0; // sin dato -> 0%, no rompe la cadena
+      f*=(1+pct/100);
       steps++;
     }
     return f;
@@ -4714,16 +4725,12 @@ function microWithDerived(){
     // Poder adquisitivo: cuántas CBT cubre el RIPTE
     const poder_adquisitivo = (ripte!=null&&cbt!=null&&cbt>0) ? ripte/cbt : '';
 
-    // RIPTE real: índice base 100 al primer dato, ajustado por IPC
+    // RIPTE real: índice base 100 en el primer registro, ajustado por inflación acumulada
     let ripte_real = '';
-    if(ripte!=null&&ripteBaseVal!=null&&ripteBaseVal>0){
-      // nominal relativo a la base
-      const nomIdx = ripte/ripteBaseVal;
-      // deflactar desde el primer registro hasta esta fecha
-      const def = deflactor(ripteBase.fecha);
-      const defCur = deflactor(e.fecha) || 1;
-      // ripte real = índice nominal / acumulación de inflación
-      ripte_real = def!=null ? (nomIdx/(defCur/def))*100 : '';
+    if(ripte!=null && ripteBaseVal!=null && ripteBaseVal>0){
+      const nomIdx = ripte/ripteBaseVal;              // cuánto subió el RIPTE nominal desde la base
+      const inflAcum = deflactorEntre(ripteBaseFecha, e.fecha); // cuánto subieron los precios en el mismo período
+      ripte_real = (nomIdx/inflAcum)*100;
     }
 
     return {
