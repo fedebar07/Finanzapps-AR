@@ -1012,7 +1012,7 @@
               <option value="dolar_mep_ia">Devaluación interanual — MEP (%)</option>
               <option value="brecha">Brecha cambiaria — Blue (%)</option>
               <option value="brecha_mep">Brecha cambiaria — MEP (%)</option>
-              <option value="tcrm">Tipo de cambio real multilateral — TCRM</option>
+              <option value="tcrm">Índice de tipo de cambio real multilateral — ITCRM (BCRA)</option>
             </optgroup>
             <optgroup label="── Tasas ──">
               <option value="tasa_bcra">Tasa BCRA (% TNA)</option>
@@ -2029,9 +2029,9 @@ const MACRO_INDICATORS = [
     hint:'La tasa de interés que fija el Banco Central. Define el piso de las tasas del sistema financiero: plazos fijos, préstamos, etc. Si es menor que la inflación, conviene gastar en vez de ahorrar en pesos.' },
 
   { id:'tcrm',
-    label:'Tipo de cambio real multilateral (TCRM) — ¿qué tan caro o barato está el dólar oficial?',
+    label:'Índice de tipo de cambio real multilateral (ITCRM) — ¿qué tan caro o barato está el dólar oficial?',
     unit:'índice', color:'#22d3ee', dec:2, min:0, max:1000,
-    hint:'Mide si el dólar oficial está "atrasado" o no. Compara el precio del dólar con la inflación de Argentina y de sus socios comerciales. Valores altos = dólar caro (competitividad exportadora). Valores bajos = dólar barato (riesgo de atraso cambiario).' },
+    hint:'Lo publica el BCRA con el nombre "ITCRM". Mide si el dólar oficial está "atrasado" o no, comparando el precio del dólar con la inflación de Argentina y de sus socios comerciales. Valores altos = dólar caro (competitividad exportadora). Valores bajos = dólar barato (riesgo de atraso cambiario).' },
 
   { id:'reservas',
     label:'Reservas del Banco Central — los dólares que tiene el Estado',
@@ -3395,6 +3395,14 @@ function hodlFmtN(n, dec) {
   return n.toLocaleString('es-AR', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
 
+/* ── Sub-nav DCA / Bots ── */
+function hodlTab(name, btn) {
+  document.querySelectorAll('.hodl-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('hodl-' + name).classList.add('active');
+  document.querySelectorAll('.hodl-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
 function hodlGetCoinId(sym) {
   return HODL_COIN_MAP[sym.toUpperCase()] || sym.toLowerCase();
 }
@@ -4617,7 +4625,7 @@ const MICRO_DERIVED = [
   { id:'cba_ia',            label:'CBA — Variación interanual',                           unit:'%',   color:'#f97316', dec:2 },
   { id:'cbt_ia',            label:'CBT — Variación interanual',                           unit:'%',   color:'#f59e0b', dec:2 },
   { id:'ripte_ia',          label:'RIPTE — Variación interanual',                         unit:'%',   color:'#86efac', dec:2 },
-  { id:'ripte_real',        label:'RIPTE real — Salario ajustado por inflación (base 100 = primer registro cargado)', unit:'índice', color:'#34d399', dec:2 },
+  { id:'ripte_real',        label:'RIPTE real — Salario ajustado por inflación (base fija: Abril 2022 = 100)', unit:'índice', color:'#34d399', dec:2 },
   { id:'poder_adquisitivo', label:'Poder adquisitivo — ¿cuántas CBT cubre el RIPTE?',    unit:'veces', color:'#22d3ee', dec:2 },
   { id:'acara_ia',          label:'ACARA — Variación interanual',                         unit:'%',   color:'#7dd3fc', dec:2 },
   { id:'afcp_ia',           label:'AFCP — Variación interanual',                          unit:'%',   color:'#c4b5fd', dec:2 },
@@ -4639,6 +4647,8 @@ let _microActiveRange = 'todo';
 let _microEditId      = null;
 let _microDeleteTarget= null;
 let _microChartInst   = null;
+let _microRipteBaseFallback = false;
+let _microRipteBaseFechaUsed = null;
 
 /* ── Helpers ── */
 function microEntries() { return MIS().entries || []; }
@@ -4668,9 +4678,22 @@ function microWithDerived(){
   });
 
   // Base para RIPTE real: valor del primer registro con dato de RIPTE
-  const ripteBase = sorted.find(e=>microN(e,'ripte')!=null);
-  const ripteBaseVal = ripteBase ? microN(ripteBase,'ripte') : null;
+  // ── RIPTE real: BASE FIJA en Abril 2022 = 100 ──
+  // Se eligió este mes por ser relativamente estable dentro de un período de
+  // inflación alta (evita la crisis de julio 2022 y la estacionalidad de
+  // diciembre/enero). Si no hay dato de RIPTE en ese mes exacto, se usa el
+  // primer registro disponible como respaldo (se avisa en el dashboard).
+  const RIPTE_BASE_FECHA = '2022-04';
+  let ripteBase = sorted.find(e => e.fecha === RIPTE_BASE_FECHA && microN(e,'ripte') != null);
+  let ripteBaseUsedFallback = false;
+  if (!ripteBase) {
+    ripteBase = sorted.find(e => microN(e,'ripte') != null);
+    ripteBaseUsedFallback = true;
+  }
+  const ripteBaseVal   = ripteBase ? microN(ripteBase,'ripte') : null;
   const ripteBaseFecha = ripteBase ? ripteBase.fecha : null;
+  _microRipteBaseFallback  = ripteBaseUsedFallback;
+  _microRipteBaseFechaUsed = ripteBaseFecha;
 
   // Inflación cargada en Portafolio (mapa fecha -> % mensual)
   // Inflación mensual cargada en Macro AR (fuente: cada entry.inflacion)
@@ -4782,6 +4805,10 @@ function microRenderDash(){
       const color=n>=1?'var(--ok)':'var(--danger)';
       const txt=n>=1?`Cubre la canasta (${n.toFixed(2)}x)`:`No llega a la canasta (${n.toFixed(2)}x)`;
       badge=`<div class="micro-card-sub" style="color:${color};font-weight:700">${txt}</div>`;
+    }
+    // Aviso si RIPTE real está usando una base de respaldo (falta Abril 2022)
+    if(ind.id==='ripte_real'&&_microRipteBaseFallback&&_microRipteBaseFechaUsed){
+      badge=`<div class="micro-card-sub" style="color:var(--warn);font-weight:600">⚠ Sin dato de Abril 2022 — usando ${_microRipteBaseFechaUsed} como base</div>`;
     }
     return `<div class="micro-card" style="border-left-color:${ind.color}">
       <div class="micro-card-label">${ind.label}</div>
