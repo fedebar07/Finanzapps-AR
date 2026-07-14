@@ -1998,129 +1998,129 @@ function importAll(e) {
    MÓDULO: MACRO AR
 ═══════════════════════════════════════════════════════════ */
 const MACRO_INDICATORS = [
-  { id:'inflacion',
+  { id:'inflacion', short:'Inflación mensual',
     label:'Inflación del mes — ¿cuánto subieron los precios este mes?',
     unit:'%', color:'#f97316', dec:2, min:-20, max:100,
     hint:'El porcentaje en que subieron los precios en promedio durante el mes. Si fue 4%, significa que lo que antes costaba $100 ahora cuesta $104.' },
 
-  { id:'dolar_of',
+  { id:'dolar_of', short:'Dólar oficial',
     label:'Dólar oficial — cotización del Banco Nación',
     unit:'ARS', color:'#60a5fa', dec:2, min:0.01, max:1e6,
     hint:'El precio del dólar que fija el Banco Central. Es el que se usa para importaciones, exportaciones y operaciones formales.' },
 
-  { id:'dolar_blue',
+  { id:'dolar_blue', short:'Dólar blue',
     label:'Dólar blue — precio en el mercado informal',
     unit:'ARS', color:'#34d399', dec:2, min:0.01, max:1e6,
     hint:'El precio del dólar en el mercado paralelo o "cueva". No es legal comprarlo así, pero refleja la demanda real de dólares de la gente.' },
 
-  { id:'dolar_mep',
+  { id:'dolar_mep', short:'Dólar MEP',
     label:'Dólar MEP (Bolsa) — compra legal a través de la Bolsa',
     unit:'ARS', color:'#a78bfa', dec:2, min:0.01, max:1e6,
     hint:'El precio del dólar que se obtiene comprando y vendiendo bonos en pesos y en dólares a través de la Bolsa. Es una forma legal de dolarizarse.' },
 
-  { id:'riesgo_pais',
+  { id:'riesgo_pais', short:'Riesgo país',
     label:'Riesgo país — ¿cuánto desconfía el mundo de la Argentina?',
     unit:'puntos básicos', color:'#fb7185', dec:0, min:0, max:20000,
     hint:'Mide cuánto extra tiene que pagar Argentina para pedir dinero prestado en el exterior comparado con EE.UU. Más alto = más desconfianza = más caro endeudarse. Por encima de 1000 puntos se considera riesgo muy alto.' },
 
-  { id:'tasa_bcra',
+  { id:'tasa_bcra', short:'Tasa BCRA',
     label:'Tasa de interés del Banco Central (BCRA) — tasa de política monetaria',
     unit:'% anual', color:'#fbbf24', dec:2, min:0, max:300,
     hint:'La tasa de interés que fija el Banco Central. Define el piso de las tasas del sistema financiero: plazos fijos, préstamos, etc. Si es menor que la inflación, conviene gastar en vez de ahorrar en pesos.' },
 
-  { id:'tcrm',
+  { id:'tcrm', short:'ITCRM',
     label:'Índice de tipo de cambio real multilateral (ITCRM) — ¿qué tan caro o barato está el dólar oficial?',
     unit:'índice', color:'#22d3ee', dec:2, min:0, max:1000,
     hint:'Lo publica el BCRA con el nombre "ITCRM". Mide si el dólar oficial está "atrasado" o no, comparando el precio del dólar con la inflación de Argentina y de sus socios comerciales. Valores altos = dólar caro (competitividad exportadora). Valores bajos = dólar barato (riesgo de atraso cambiario).' },
 
-  { id:'reservas',
+  { id:'reservas', short:'Reservas BCRA',
     label:'Reservas del Banco Central — los dólares que tiene el Estado',
     unit:'millones de USD', color:'#4ade80', dec:0, min:-1e5, max:2e5,
     hint:'El stock de dólares (y otros activos) que tiene el Banco Central en caja. Son la principal defensa ante una crisis cambiaria. Pueden ser negativas si el BCRA tiene deudas en dólares mayores a sus activos.' },
 
-  { id:'emae',
+  { id:'emae', short:'Actividad (EMAE) i.a.',
     label:'Actividad económica (EMAE) — ¿la economía creció o cayó respecto al año pasado?',
     unit:'% vs. mismo mes del año anterior', color:'#38bdf8', dec:1, min:-30, max:30,
     hint:'Variación interanual del Estimador Mensual de Actividad Económica (EMAE) del INDEC. Positivo = la economía produce más que hace un año. Negativo = produce menos (recesión).' },
 
-  { id:'emae_mensual',
+  { id:'emae_mensual', short:'Actividad (EMAE) mensual',
     label:'Actividad económica (EMAE) — ¿cómo le fue a la economía este mes respecto al mes anterior?',
     unit:'% vs. mes anterior (sin estacionalidad)', color:'#0ea5e9', dec:1, min:-10, max:10,
     hint:'Variación mensual desestacionalizada. Filtra el efecto de las temporadas (verano, invierno, etc.) para ver la tendencia real mes a mes.' },
 
-  { id:'balanza_comercial',
+  { id:'balanza_comercial', short:'Balanza comercial',
     label:'Balanza comercial — ¿exportamos más de lo que importamos?',
     unit:'millones de USD', color:'#f472b6', dec:0, min:-50000, max:50000,
     hint:'Exportaciones menos importaciones. Positivo = superávit comercial (entra más plata de la que sale). Negativo = déficit comercial (sale más de lo que entra). Es una de las principales fuentes de dólares del país.' },
 
-  { id:'m2',
+  { id:'m2', short:'Dinero en circulación (M2)',
     label:'Dinero en circulación (M2 privado) — ¿cuánto creció la cantidad de pesos en la economía?',
     unit:'% mensual real (sin inflación ni estacionalidad)', color:'#c084fc', dec:2, min:-20, max:50,
     hint:'Variación mensual real de los pesos privados en circulación (billetes, depósitos a la vista). Si crece mucho más que la actividad, es una señal de presión inflacionaria futura.' },
 
-  { id:'resultado_primario',
+  { id:'resultado_primario', short:'Resultado primario',
     label:'Resultado primario del Estado — ¿el Estado gastó más o menos de lo que recaudó? (sin contar intereses de deuda)',
     unit:'millones de ARS', color:'#86efac', dec:0, min:-1e8, max:1e8,
     hint:'Ingresá el dato en millones de pesos. Positivo = superávit (el Estado recaudó más de lo que gastó, sin contar lo que pagó de intereses de su deuda). Negativo = déficit (gastó más de lo que recaudó). Es el indicador de disciplina fiscal más seguido por los mercados.' },
 
-  { id:'resultado_financiero',
+  { id:'resultado_financiero', short:'Resultado financiero',
     label:'Resultado financiero del Estado — situación fiscal real incluyendo el pago de intereses de la deuda',
     unit:'millones de ARS', color:'#fca5a5', dec:0, min:-1e8, max:1e8,
     hint:'Igual que el resultado primario pero SÍ incluye los intereses que el Estado pagó por su deuda. Es el número que refleja si Argentina realmente vive dentro de sus posibilidades o sigue endeudándose. Positivo = superávit financiero. Negativo = déficit financiero.' },
 ];
 
 const MACRO_DERIVED = [
-  { id:'inflacion_ia',
+  { id:'inflacion_ia', short:'Inflación interanual',
     label:'Inflación acumulada en los últimos 12 meses',
     unit:'%', color:'#fb923c', dec:2,
     hint:'Cuánto subieron los precios en el último año completo. Se calcula encadenando los 12 meses anteriores.' },
 
-  { id:'inflacion_acum',
+  { id:'inflacion_acum', short:'Inflación acum. anual',
     label:'Inflación acumulada en lo que va del año',
     unit:'%', color:'#fdba74', dec:2,
     hint:'Cuánto subieron los precios desde enero hasta el mes actual. Resetea cada 1° de enero.' },
 
-  { id:'brecha',
+  { id:'brecha', short:'Brecha (blue)',
     label:'Brecha cambiaria con el dólar blue — diferencia entre el blue y el oficial',
     unit:'%', color:'#2dd4bf', dec:2,
     hint:'Cuánto más caro está el dólar blue respecto al oficial. Una brecha del 30% significa que el blue vale 30% más que el oficial. Brechas altas indican desconfianza en la política cambiaria.' },
 
-  { id:'brecha_mep',
+  { id:'brecha_mep', short:'Brecha (MEP)',
     label:'Brecha cambiaria con el dólar MEP — diferencia entre el MEP y el oficial',
     unit:'%', color:'#5eead4', dec:2,
     hint:'Cuánto más caro está el dólar MEP (Bolsa) respecto al oficial. Al ser una operación legal, la brecha MEP suele ser menor a la brecha blue.' },
 
-  { id:'tasa_real',
+  { id:'tasa_real', short:'Tasa real mensual',
     label:'Tasa de interés real mensual — ¿el plazo fijo le gana a la inflación?',
     unit:'% mensual', color:'#facc15', dec:2,
     hint:'La tasa del Banco Central menos la inflación del mes (fórmula de Fisher). Positiva = el plazo fijo rinde más que la inflación y conviene ahorrar en pesos. Negativa = la inflación se come el rendimiento y perdés poder de compra.' },
 
-  { id:'dolar_of_ia',
+  { id:'dolar_of_ia', short:'Devaluación oficial',
     label:'Devaluación del dólar oficial en el último año',
     unit:'%', color:'#3b82f6', dec:2,
     hint:'Cuánto subió el dólar oficial en los últimos 12 meses. Si es menor que la inflación, el dólar oficial se está "atrasando".' },
 
-  { id:'dolar_blue_ia',
+  { id:'dolar_blue_ia', short:'Devaluación blue',
     label:'Devaluación del dólar blue en el último año',
     unit:'%', color:'#10b981', dec:2,
     hint:'Cuánto subió el dólar blue en los últimos 12 meses.' },
 
-  { id:'dolar_mep_ia',
+  { id:'dolar_mep_ia', short:'Devaluación MEP',
     label:'Devaluación del dólar MEP en el último año',
     unit:'%', color:'#8b5cf6', dec:2,
     hint:'Cuánto subió el dólar MEP (Bolsa) en los últimos 12 meses.' },
 
-  { id:'m2_ia',
+  { id:'m2_ia', short:'M2 interanual',
     label:'Crecimiento del dinero en circulación en el último año (real, sin inflación)',
     unit:'%', color:'#a855f7', dec:2,
     hint:'Cuánto creció la cantidad de pesos en la economía en los últimos 12 meses, descontando la inflación. Si crece mucho, puede ser señal de futura presión sobre los precios o el dólar.' },
 
-  { id:'resultado_primario_12m',
+  { id:'resultado_primario_12m', short:'Result. primario 12m',
     label:'Resultado primario acumulado — suma de los últimos 12 meses (sin intereses de deuda)',
     unit:'millones de ARS', color:'#4ade80', dec:0,
     hint:'La suma de los resultados primarios de los últimos 12 meses. Elimina el ruido mes a mes y muestra la tendencia fiscal real del Estado.' },
 
-  { id:'resultado_financiero_12m',
+  { id:'resultado_financiero_12m', short:'Result. financiero 12m',
     label:'Resultado financiero acumulado — suma de los últimos 12 meses (con intereses de deuda)',
     unit:'millones de ARS', color:'#f87171', dec:0,
     hint:'La suma de los resultados financieros de los últimos 12 meses. Indica si Argentina está reduciendo o aumentando su deuda en términos reales.' },
@@ -2285,7 +2285,7 @@ function macroRenderDash() {
       ? `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-top:4px;display:inline-block;background:${fiscalNum>=0?'rgba(74,222,128,.15)':'rgba(248,81,73,.15)'};color:${fiscalNum>=0?'#4ade80':'#f85149'}">${fiscalNum>=0?'✚ SUPERÁVIT':'✖ DÉFICIT'}</span>`
       : '';
     return `<div class="macro-card" style="border-left-color:${ind.color}">
-      <div class="macro-card-label">${ind.label}</div>
+      <div class="macro-card-label">${ind.short || ind.label}</div>
       <div class="macro-card-value" style="color:${ind.color}">${val??'—'}</div>
       ${fiscalTag}
       ${last?`<div class="macro-card-date">${last.fecha}</div>`:''}
@@ -2387,8 +2387,8 @@ function macroRenderHistorial() {
   const all = [...MACRO_INDICATORS,...MACRO_DERIVED];
   document.getElementById('macro-hist-head').innerHTML=`<tr>
     <th>Fecha</th>
-    ${MACRO_INDICATORS.map(i=>`<th>${i.label}</th>`).join('')}
-    ${MACRO_DERIVED.map(i=>`<th>${i.label}</th>`).join('')}
+    ${MACRO_INDICATORS.map(i=>`<th>${i.short||i.label}</th>`).join('')}
+    ${MACRO_DERIVED.map(i=>`<th>${i.short||i.label}</th>`).join('')}
     <th></th></tr>`;
 
   const rows = [...macroWithDerived()].reverse();
@@ -3805,14 +3805,17 @@ function hodlPedirEliminarActivo(nombre) {
 /* ── Resumen global ── */
 function hodlRenderResumen() {
   const activos = HS().activos || {};
-  let capitalDCA=0, valorDCA=0, capitalRecupDCA=0, tienePrecios=false;
+  let capitalDCA=0, valorDCA=0, capitalRecupDCA=0, gpRealizadoDCA=0, tienePrecios=false;
   Object.keys(activos).forEach(nombre => {
     const res = hodlCalcResumen(activos[nombre]);
     capitalDCA      += res.capitalInvertido;
     capitalRecupDCA += res.capitalRecuperado;
+    gpRealizadoDCA  += res.gpRealizado;
     const cache = _hodlPrices[nombre];
-    if (cache && res.cantidadActual>0) { valorDCA += res.cantidadActual*cache.precio+res.gpRealizado; tienePrecios=true; }
-    else valorDCA += res.cantidadActual*res.promedio+res.gpRealizado;
+    // Valor de mercado de lo que AÚN tenés en cartera (sin sumar ventas ya cobradas,
+    // porque esas ya se reflejan en capitalRecuperado / capital disponible).
+    if (cache && res.cantidadActual>0) { valorDCA += res.cantidadActual*cache.precio; tienePrecios=true; }
+    else valorDCA += res.cantidadActual*res.promedio;
   });
   const bots = HS().bots || [];
   const botsCerrados = HS().botsCerrados || [];
@@ -3821,7 +3824,14 @@ function hodlRenderResumen() {
   const gpBotsCerr  = botsCerrados.reduce((s,b)=>s+b.ganancia,0);
   const totalInv    = capitalDCA + capitalBots;
   const totalValor  = valorDCA + valorBots;
-  const totalGP     = (totalValor - totalInv) + gpBotsCerr;
+  // G/P total = (valor de mercado de lo que sigue en cartera − su costo de origen,
+  // es decir la plusvalía NO realizada) + ganancia YA realizada en ventas DCA
+  // + ganancia ya realizada en bots cerrados.
+  // costoAbiertoDCA = lo que costó comprar lo que aún tenés en cartera
+  //                 = capital invertido total − costo de lo ya vendido
+  //                 = capitalDCA − (capitalRecupDCA − gpRealizadoDCA)
+  const costoAbiertoDCA = capitalDCA - (capitalRecupDCA - gpRealizadoDCA);
+  const totalGP     = (valorDCA - costoAbiertoDCA) + gpRealizadoDCA + (valorBots - capitalBots) + gpBotsCerr;
   const totalGPpct  = totalInv>0?(totalGP/totalInv*100):0;
   const gpColor     = totalGP>=0?'var(--ok)':'var(--danger)';
   const gpSign      = totalGP>=0?'+':'';
@@ -4035,10 +4045,24 @@ function hodlAbrirEditarGanancia(i) {
 function hodlSaveEditBot() {
   const val = parseFloat(document.getElementById('hodl-editbot-val').value);
   if (isNaN(val)) { showToast('Valor inválido','err'); return; }
-  if (_hodlEditBotField==='ganancia') (HS().bots||[])[_hodlEditBotIdx].ganancia = val;
-  hodlSave(); closeModal('hodl-modal-editbot');
-  hodlRenderBots(); hodlRenderResumen();
-  showToast('✓ Ganancia actualizada','ok');
+
+  if (_hodlEditBotField === 'ganancia') {
+    (HS().bots||[])[_hodlEditBotIdx].ganancia = val;
+    hodlSave(); closeModal('hodl-modal-editbot');
+    hodlRenderBots(); hodlRenderResumen();
+    showToast('✓ Ganancia actualizada','ok');
+    return;
+  }
+
+  if (_hodlEditBotField === 'cerrar') {
+    const b = (HS().bots||[])[_hodlEditBotIdx];
+    if (!HS().botsCerrados) HS().botsCerrados = [];
+    HS().botsCerrados.push({...b, ganancia:val, fechaCierre:new Date().toISOString().split('T')[0]});
+    HS().bots.splice(_hodlEditBotIdx, 1);
+    hodlSave(); closeModal('hodl-modal-editbot');
+    hodlRenderBots(); hodlRenderBotsCerrados(); hodlRenderResumen();
+    showToast(`✓ Bot "${b.nombre}" cerrado`,'ok');
+  }
 }
 function hodlAbrirCerrarBot(i) {
   _hodlEditBotIdx = i;
@@ -4060,22 +4084,6 @@ function hodlEliminarBotCerrado(i) {
   (HS().botsCerrados||[]).splice(i,1); hodlSave(); hodlRenderBotsCerrados(); hodlRenderResumen();
   showToast('Bot eliminado del historial','ok');
 }
-
-/* Cerrar bot: mover a cerrados */
-const _hodlSaveEditBotOrig = hodlSaveEditBot;
-// Override para manejar cierre
-window.hodlSaveEditBot = function() {
-  if (_hodlEditBotField !== 'cerrar') { _hodlSaveEditBotOrig(); return; }
-  const val = parseFloat(document.getElementById('hodl-editbot-val').value);
-  if (isNaN(val)) { showToast('Valor inválido','err'); return; }
-  const b = (HS().bots||[])[_hodlEditBotIdx];
-  if (!HS().botsCerrados) HS().botsCerrados=[];
-  HS().botsCerrados.push({...b, ganancia:val, fechaCierre:new Date().toISOString().split('T')[0]});
-  HS().bots.splice(_hodlEditBotIdx,1);
-  hodlSave(); closeModal('hodl-modal-editbot');
-  hodlRenderBots(); hodlRenderBotsCerrados(); hodlRenderResumen();
-  showToast(`✓ Bot "${b.nombre}" cerrado`,'ok');
-};
 
 /* ── Init ── */
 function onhodlerEnter() {
@@ -4602,33 +4610,47 @@ window.addEventListener('resize', ()=>{ if(document.getElementById('section-gast
    MÓDULO: MICRO AR
 ═══════════════════════════════════════════════════════════ */
 const MICRO_INDICATORS = [
-  { id:'cba',   label:'CBA — Canasta Básica Alimentaria (hogar tipo)',
+  { id:'cba', short:'CBA',
+    label:'CBA — Canasta Básica Alimentaria (hogar tipo)',
     unit:'ARS', color:'#fb923c', dec:0, min:0, max:1e8,
     hint:'Valor mensual en pesos de la canasta mínima de alimentos para una familia de 4 personas (2 adultos y 2 menores). Si el ingreso familiar es menor a este valor, el hogar es indigente.' },
-  { id:'cbt',   label:'CBT — Canasta Básica Total / umbral de pobreza (hogar tipo)',
+  { id:'cbt', short:'CBT',
+    label:'CBT — Canasta Básica Total / umbral de pobreza (hogar tipo)',
     unit:'ARS', color:'#f59e0b', dec:0, min:0, max:1e8,
     hint:'Valor mensual en pesos de la canasta completa (alimentos + servicios + vestimenta + transporte) para una familia de 4 personas. Si el ingreso familiar es menor a este valor, el hogar es pobre.' },
-  { id:'ripte', label:'RIPTE — Salario promedio de trabajadores formales',
+  { id:'ripte', short:'RIPTE',
+    label:'RIPTE — Salario promedio de trabajadores formales',
     unit:'ARS', color:'#4ade80', dec:0, min:0, max:1e8,
     hint:'Remuneración Imponible Promedio de los Trabajadores Estables. Es el salario bruto promedio de los empleados formales privados registrados. Lo publica el Ministerio de Trabajo cada mes.' },
-  { id:'acara', label:'ACARA — Patentamientos de autos 0km',
+  { id:'acara', short:'ACARA',
+    label:'ACARA — Patentamientos de autos 0km',
     unit:'unidades', color:'#38bdf8', dec:0, min:0, max:200000,
     hint:'Cantidad de autos 0km patentados durante el mes en todo el país. Es un indicador adelantado del consumo y del crédito. Cuando cae mucho, suele anticipar una recesión.' },
-  { id:'afcp',  label:'AFCP — Despachos de cemento',
+  { id:'afcp', short:'AFCP',
+    label:'AFCP — Despachos de cemento',
     unit:'miles de toneladas', color:'#a78bfa', dec:1, min:0, max:2000,
     hint:'Toneladas de cemento despachadas al mercado interno durante el mes (en miles), publicado por la Asociación de Fabricantes de Cemento Portland. Es el mejor indicador mensual de la actividad en construcción.' },
 ];
 
 const MICRO_DERIVED = [
-  { id:'cba_var',           label:'CBA — Variación mensual',                              unit:'%',   color:'#fdba74', dec:2 },
-  { id:'cbt_var',           label:'CBT — Variación mensual',                              unit:'%',   color:'#fcd34d', dec:2 },
-  { id:'cba_ia',            label:'CBA — Variación interanual',                           unit:'%',   color:'#f97316', dec:2 },
-  { id:'cbt_ia',            label:'CBT — Variación interanual',                           unit:'%',   color:'#f59e0b', dec:2 },
-  { id:'ripte_ia',          label:'RIPTE — Variación interanual',                         unit:'%',   color:'#86efac', dec:2 },
-  { id:'ripte_real',        label:'RIPTE real — Salario ajustado por inflación (base fija: Abril 2022 = 100)', unit:'índice', color:'#34d399', dec:2 },
-  { id:'poder_adquisitivo', label:'Poder adquisitivo — ¿cuántas CBT cubre el RIPTE?',    unit:'veces', color:'#22d3ee', dec:2 },
-  { id:'acara_ia',          label:'ACARA — Variación interanual',                         unit:'%',   color:'#7dd3fc', dec:2 },
-  { id:'afcp_ia',           label:'AFCP — Variación interanual',                          unit:'%',   color:'#c4b5fd', dec:2 },
+  { id:'cba_var', short:'CBA mensual',
+    label:'CBA — Variación mensual', unit:'%', color:'#fdba74', dec:2 },
+  { id:'cbt_var', short:'CBT mensual',
+    label:'CBT — Variación mensual', unit:'%', color:'#fcd34d', dec:2 },
+  { id:'cba_ia', short:'CBA interanual',
+    label:'CBA — Variación interanual', unit:'%', color:'#f97316', dec:2 },
+  { id:'cbt_ia', short:'CBT interanual',
+    label:'CBT — Variación interanual', unit:'%', color:'#f59e0b', dec:2 },
+  { id:'ripte_ia', short:'RIPTE interanual',
+    label:'RIPTE — Variación interanual', unit:'%', color:'#86efac', dec:2 },
+  { id:'ripte_real', short:'RIPTE real',
+    label:'RIPTE real — Salario ajustado por inflación (base fija: Abril 2022 = 100)', unit:'índice', color:'#34d399', dec:2 },
+  { id:'poder_adquisitivo', short:'Poder adquisitivo',
+    label:'Poder adquisitivo — ¿cuántas CBT cubre el RIPTE?', unit:'veces', color:'#22d3ee', dec:2 },
+  { id:'acara_ia', short:'ACARA interanual',
+    label:'ACARA — Variación interanual', unit:'%', color:'#7dd3fc', dec:2 },
+  { id:'afcp_ia', short:'AFCP interanual',
+    label:'AFCP — Variación interanual', unit:'%', color:'#c4b5fd', dec:2 },
 ];
 
 const MICRO_RANGE_OPTS = [
@@ -4811,7 +4833,7 @@ function microRenderDash(){
       badge=`<div class="micro-card-sub" style="color:var(--warn);font-weight:600">⚠ Sin dato de Abril 2022 — usando ${_microRipteBaseFechaUsed} como base</div>`;
     }
     return `<div class="micro-card" style="border-left-color:${ind.color}">
-      <div class="micro-card-label">${ind.label}</div>
+      <div class="micro-card-label">${ind.short || ind.label}</div>
       <div class="micro-card-value" style="color:${ind.color}">${val??'—'}</div>
       ${badge}
       ${last?`<div class="micro-card-date">${last.fecha}</div>`:''}
@@ -4827,7 +4849,7 @@ function microRenderDash(){
 function microBuildInputs(){
   document.getElementById('micro-inputs').innerHTML = MICRO_INDICATORS.map(ind=>`
     <div class="form-group" style="margin-bottom:0">
-      <label>${ind.label.split('—')[0].trim()} <span style="color:var(--dimmed)">(${ind.unit})</span></label>
+      <label>${(ind.short||ind.label)} <span style="color:var(--dimmed)">(${ind.unit})</span></label>
       <input type="number" step="any" ${ind.min>=0?`min="${ind.min}"`:''}
         max="${ind.max}" placeholder="—" id="micf-${ind.id}" class="input">
       ${ind.hint?`<p style="font-size:10px;color:var(--muted);margin-top:3px">${ind.hint}</p>`:''}
@@ -4866,9 +4888,9 @@ function microSubmit(){
     const raw=document.getElementById('micf-'+ind.id)?.value??'';
     if(raw===''){record[ind.id]='';continue;}
     const n=Number(raw);
-    if(isNaN(n)){showToast(`"${ind.label.split('—')[0].trim()}" no es válido`,'err');return;}
-    if(ind.min>=0&&n<ind.min){showToast(`"${ind.label.split('—')[0].trim()}" no puede ser negativo`,'err');return;}
-    if(n>ind.max){showToast(`"${ind.label.split('—')[0].trim()}" fuera de rango`,'err');return;}
+    if(isNaN(n)){showToast(`"${(ind.short||ind.label)}" no es válido`,'err');return;}
+    if(ind.min>=0&&n<ind.min){showToast(`"${(ind.short||ind.label)}" no puede ser negativo`,'err');return;}
+    if(n>ind.max){showToast(`"${(ind.short||ind.label)}" fuera de rango`,'err');return;}
     record[ind.id]=raw; hasValue=true;
   }
   if(!hasValue){showToast('Ingresá al menos un valor','err');return;}
@@ -4897,8 +4919,8 @@ function microRenderHistorial(){
 
   document.getElementById('micro-hist-head').innerHTML=`<tr>
     <th>Fecha</th>
-    ${MICRO_INDICATORS.map(i=>`<th>${i.label.split('—')[0].trim()}</th>`).join('')}
-    ${MICRO_DERIVED.map(i=>`<th>${i.label.split('—')[0].trim()}</th>`).join('')}
+    ${MICRO_INDICATORS.map(i=>`<th>${i.short||i.label}</th>`).join('')}
+    ${MICRO_DERIVED.map(i=>`<th>${i.short||i.label}</th>`).join('')}
     <th></th></tr>`;
 
   const rows=[...microWithDerived()].reverse();
@@ -4978,7 +5000,7 @@ function microRenderChart(){
     empty.style.display='block';wrap.style.display='none';leg.textContent='';return;
   }
   empty.style.display='none';wrap.style.display='block';
-  leg.textContent=`${ind.label.split('—')[0].trim()} — ${ind.unit}`;
+  leg.textContent=`${(ind.short||ind.label)} — ${ind.unit}`;
 
   if(_microChartInst) _microChartInst.destroy();
   const ctx=document.getElementById('micro-chart').getContext('2d');
