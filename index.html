@@ -1696,6 +1696,8 @@
               <option value="acara_ia">ACARA — Variación interanual (%)</option>
               <option value="afcp">AFCP — Despachos de cemento (miles de toneladas)</option>
               <option value="afcp_ia">AFCP — Variación interanual (%)</option>
+              <option value="uci">UCI — Uso de la capacidad instalada industrial (%)</option>
+              <option value="uci_ia">UCI — Variación interanual (puntos porcentuales)</option>
             </optgroup>
             <optgroup label="── Variaciones mensuales ──">
               <option value="cba_var">CBA — Variación mensual (%)</option>
@@ -4630,6 +4632,10 @@ const MICRO_INDICATORS = [
     label:'AFCP — Despachos de cemento',
     unit:'miles de toneladas', color:'#a78bfa', dec:1, min:0, max:2000,
     hint:'Toneladas de cemento despachadas al mercado interno durante el mes (en miles), publicado por la Asociación de Fabricantes de Cemento Portland. Es el mejor indicador mensual de la actividad en construcción.' },
+  { id:'uci', short:'Uso capacidad industrial',
+    label:'UCI — Uso de la capacidad instalada industrial',
+    unit:'%', color:'#fbbf24', dec:1, min:0, max:100,
+    hint:'Publicado por el INDEC. Mide qué porcentaje de la capacidad total de las fábricas se está usando realmente. Si está muy bajo (ej. 55%), significa que hay mucha ociosidad industrial. Si está alto (ej. 75-80%), la industria trabaja casi al límite.' },
 ];
 
 const MICRO_DERIVED = [
@@ -4651,6 +4657,8 @@ const MICRO_DERIVED = [
     label:'ACARA — Variación interanual', unit:'%', color:'#7dd3fc', dec:2 },
   { id:'afcp_ia', short:'AFCP interanual',
     label:'AFCP — Variación interanual', unit:'%', color:'#c4b5fd', dec:2 },
+  { id:'uci_ia', short:'Uso capacidad interanual',
+    label:'UCI — Variación interanual (puntos porcentuales)', unit:'p.p.', color:'#fcd34d', dec:1 },
 ];
 
 const MICRO_RANGE_OPTS = [
@@ -4690,13 +4698,14 @@ function microWithDerived(){
   if(!sorted.length) return [];
 
   // Mapas por fecha
-  const cbaMap={}, cbtMap={}, ripteMap={}, acaraMap={}, afcpMap={};
+  const cbaMap={}, cbtMap={}, ripteMap={}, acaraMap={}, afcpMap={}, uciMap={};
   sorted.forEach(e=>{
     cbaMap[e.fecha]   = microN(e,'cba');
     cbtMap[e.fecha]   = microN(e,'cbt');
     ripteMap[e.fecha] = microN(e,'ripte');
     acaraMap[e.fecha] = microN(e,'acara');
     afcpMap[e.fecha]  = microN(e,'afcp');
+    uciMap[e.fecha]   = microN(e,'uci');
   });
 
   // Base para RIPTE real: valor del primer registro con dato de RIPTE
@@ -4762,6 +4771,17 @@ function microWithDerived(){
     return (cur/prevVal-1)*100;
   }
 
+  // Para indicadores que YA son un porcentaje (como UCI), la comparación
+  // interanual correcta es una resta simple en "puntos porcentuales",
+  // no una variación relativa (evita confundir "+5 p.p." con "+5%").
+  function diffPuntos(map, fecha){
+    const [y,m] = fecha.split('-');
+    const prev = `${Number(y)-1}-${m}`;
+    const cur=map[fecha], prevVal=map[prev];
+    if(cur==null||prevVal==null) return '';
+    return cur-prevVal;
+  }
+
   return sorted.map(e=>{
     const cba   = cbaMap[e.fecha];
     const cbt   = cbtMap[e.fecha];
@@ -4789,6 +4809,7 @@ function microWithDerived(){
       poder_adquisitivo,
       acara_ia:          varInteranual(acaraMap, e.fecha),
       afcp_ia:           varInteranual(afcpMap,  e.fecha),
+      uci_ia:            diffPuntos(uciMap, e.fecha),
     };
   });
 }
