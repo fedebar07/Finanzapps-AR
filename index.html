@@ -834,10 +834,25 @@
     .gast-week-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; gap:2px; }
     .gast-week-bar { width:100%; border-radius:3px 3px 0 0; transition:height .3s ease; }
     .gast-week-label { font-family:var(--mono); font-size:9px; color:var(--muted); }
-    .gast-trend-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; gap:2px; cursor:pointer; }
-    .gast-trend-bar { width:100%; border-radius:2px 2px 0 0; min-height:2px; transition:all .3s ease; }
-    .gast-trend-bar-wrap.active-m .gast-trend-bar { background:var(--gastos)!important; }
-    .gast-trend-label { font-family:var(--mono); font-size:9px; color:var(--muted); }
+    /* Barras de balance anual (positivo hacia arriba, negativo hacia abajo desde el centro) */
+    .gast-bal-bar-wrap {
+      flex:1; display:flex; flex-direction:column; align-items:center;
+      height:100%; position:relative; cursor:pointer;
+    }
+    .gast-bal-bar-track {
+      position:relative; width:100%; height:100%;
+      display:flex; flex-direction:column; justify-content:center;
+    }
+    .gast-bal-bar {
+      width:100%; border-radius:2px; min-height:2px; transition:all .3s ease;
+    }
+    .gast-bal-zero-line {
+      position:absolute; left:0; right:0; top:50%; height:1px; background:var(--border);
+    }
+    .gast-bal-label {
+      font-family:var(--mono); font-size:9px; color:var(--muted); text-align:center; margin-top:4px;
+    }
+    .gast-bal-bar-wrap.active-m .gast-bal-label { color:var(--gastos); font-weight:700; }
     @media(max-width:700px) {
       #section-gastos .grid-2 { grid-template-columns:1fr; }
       #gast-monthly-summary { grid-template-columns:1fr 1fr !important; }
@@ -1110,6 +1125,33 @@
 
     <!-- ── DASHBOARD ── -->
     <div id="port-pdash" class="port-panel active">
+
+      <!-- Foto manual del patrimonio (inicio/cierre de mes) -->
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <p class="card-label" style="margin:0">📸 Foto del patrimonio — inicio y cierre de mes</p>
+          <button class="gast-toggle-btn" onclick="gastToggleSection('port-foto-wrap', this)">ocultar</button>
+        </div>
+        <div class="gast-collapsible" id="port-foto-wrap">
+          <p style="font-size:11px;color:var(--muted);margin-bottom:12px">
+            Registrá el monto total real de tu cuenta (todo mezclado) al arrancar y al cerrar cada mes, para ver la evolución de un vistazo sin tener que interpretar gráficos.
+          </p>
+          <div class="form-row" style="margin-bottom:10px">
+            <div class="form-group" style="margin:0"><label>Mes</label><select id="port-foto-month" class="input" onchange="portRenderFoto()"></select></div>
+            <div class="form-group" style="margin:0"><label>Año</label><input type="number" id="port-foto-year" class="input" onchange="portRenderFoto()"></div>
+          </div>
+          <div class="form-row" style="margin-bottom:10px">
+            <div class="form-group" style="margin:0"><label>Patrimonio al inicio del mes</label><input type="number" id="port-foto-inicio" class="input" placeholder="Ej. 2500000"></div>
+            <div class="form-group" style="margin:0"><label>Patrimonio al cierre del mes</label><input type="number" id="port-foto-cierre" class="input" placeholder="Ej. 2680000"></div>
+          </div>
+          <button class="btn btn-ok btn-sm btn-full" onclick="portSaveFoto()">Guardar foto del mes</button>
+          <div id="port-foto-resumen" style="margin-top:12px"></div>
+          <div style="position:relative;height:160px;margin-top:14px" id="port-foto-chart-wrap">
+            <canvas id="port-foto-chart"></canvas>
+          </div>
+        </div>
+      </div>
+
       <div class="grid-4" id="port-kpis" style="margin-bottom:14px"></div>
       <!-- Evolución -->
       <div class="card" style="margin-bottom:14px">
@@ -1233,7 +1275,7 @@
         <div class="form-group"><label>Año</label><input type="number" id="port-res-year" class="input"></div>
       </div>
       <div class="form-group"><label>Ganancia / Pérdida</label><input type="number" id="port-res-gain" class="input" placeholder="18000 o -5000"><p id="port-res-cur-note" class="form-note"></p></div>
-      <div class="form-group"><label>TC de ese mes <span style="color:var(--muted);font-weight:400">(opcional)</span></label><input type="number" id="port-res-tc" class="input" placeholder="Ej. 1200"></div>
+      <div class="form-group"><label>TC de ese mes <span style="color:var(--muted);font-weight:400">(opcional)</span></label><input type="number" id="port-res-tc" class="input" placeholder="Ej. 1200"><p class="form-note">Solo aplica si la categoría es en USD. Corrige la cotización histórica del tipo de dólar de la categoría para ese mes.</p></div>
       <button class="btn btn-ok btn-full" onclick="portAddResult()">Guardar resultado</button>
     </div>
   </div>
@@ -1599,10 +1641,27 @@
         <!-- Resumen total del mes -->
         <div id="gast-monthly-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px"></div>
         <div style="position:relative;height:200px;margin-bottom:14px"><canvas id="gast-monthly-canvas"></canvas></div>
-        <!-- Trend 12 meses -->
-        <div id="gast-trend-bars" style="display:flex;align-items:flex-end;gap:4px;height:50px;margin-bottom:8px"></div>
         <!-- Categorías del mes -->
         <div id="gast-monthly-cats" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+    </div>
+
+    <!-- Panorama anual: balance mes a mes, con gasto e ingreso al tocar cada barra -->
+    <div class="card" style="margin-top:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+        <p style="font-size:15px;font-weight:700">Panorama del año</p>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="gastChangeBalanceYear(-1)">‹</button>
+          <span id="gast-balance-year-label" style="font-family:var(--mono);font-size:13px;min-width:50px;text-align:center"></span>
+          <button class="btn btn-outline btn-sm" onclick="gastChangeBalanceYear(1)">›</button>
+          <button class="gast-toggle-btn" onclick="gastToggleSection('gast-balance-wrap', this)">ocultar</button>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:14px">De un vistazo: en qué meses gastaste más de lo que ingresó (déficit, en rojo) y en cuáles te sobró (superávit, en verde). Tocá una barra para ver el detalle de gasto e ingreso de ese mes.</p>
+      <div class="gast-collapsible" id="gast-balance-wrap">
+        <div id="gast-balance-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px"></div>
+        <div id="gast-balance-bars" style="display:flex;align-items:flex-end;gap:6px;height:130px;margin-bottom:8px"></div>
+        <div id="gast-balance-detail" style="font-size:11px;color:var(--muted);text-align:center;min-height:16px"></div>
       </div>
     </div>
 
@@ -1836,6 +1895,7 @@ function buildDefaultState() {
       inflation: {},
       dollarRates: { oficial: 1000, blue: 1000, mep: 1000, ccl: 1000 },
       dollarHistory: { oficial: {}, blue: {}, mep: {}, ccl: {} },
+      fotos: {}, // { "2026-07": { inicio: 2500000, cierre: 2680000 } }
     },
     hodler: {
       activos: {},
@@ -2868,13 +2928,107 @@ function portRenderInflacion(){
   </div>`;
 }
 
-/* ── Populate selects ── */
+/* ── Foto manual del patrimonio (inicio/cierre de mes) ── */
+let _portFotoChart = null;
+
+function portFotoKey(m,y){ return `${y}-${String(m).padStart(2,'0')}`; }
+
+function portSaveFoto(){
+  const month = parseInt(document.getElementById('port-foto-month').value);
+  const year  = parseInt(document.getElementById('port-foto-year').value);
+  const inicio = parseFloat(document.getElementById('port-foto-inicio').value);
+  const cierre = parseFloat(document.getElementById('port-foto-cierre').value);
+  if(isNaN(inicio) && isNaN(cierre)){
+    showToast('Ingresá al menos un monto (inicio o cierre)','err');
+    return;
+  }
+  if(!PS().fotos) PS().fotos = {};
+  const key = portFotoKey(month, year);
+  const existing = PS().fotos[key] || {};
+  PS().fotos[key] = {
+    inicio: !isNaN(inicio) ? inicio : (existing.inicio ?? null),
+    cierre: !isNaN(cierre) ? cierre : (existing.cierre ?? null),
+  };
+  portSave();
+  showToast('✓ Foto del mes guardada','ok');
+  portRenderFoto();
+}
+
+function portRenderFoto(){
+  const fotos = PS().fotos || {};
+  const keys = Object.keys(fotos).sort();
+
+  // Resumen del mes seleccionado en el formulario (variación inicio->cierre)
+  const el = document.getElementById('port-foto-resumen');
+  const selMonth = document.getElementById('port-foto-month');
+  const selYear  = document.getElementById('port-foto-year');
+  if(el && selMonth && selYear){
+    const key = portFotoKey(parseInt(selMonth.value)||PORT_NOW_M, parseInt(selYear.value)||PORT_NOW_Y);
+    const f = fotos[key];
+    if(f && f.inicio!=null && f.cierre!=null && f.inicio>0){
+      const variacion = ((f.cierre - f.inicio)/f.inicio)*100;
+      const color = variacion>=0 ? 'var(--port)' : 'var(--danger)';
+      el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+        <span style="font-size:11px;color:var(--muted)">Variación del mes cargado</span>
+        <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:${color}">${variacion>=0?'+':''}${variacion.toFixed(2)}%  (${variacion>=0?'+':''}${portFmtARS(f.cierre-f.inicio)})</span>
+      </div>`;
+    } else {
+      el.innerHTML = '';
+    }
+    // precargar inputs si ya existe ese mes
+    document.getElementById('port-foto-inicio').value = f?.inicio ?? '';
+    document.getElementById('port-foto-cierre').value = f?.cierre ?? '';
+  }
+
+  // Gráfico de evolución: usa el cierre de cada mes (o el inicio si falta cierre)
+  const ctx = document.getElementById('port-foto-chart')?.getContext('2d');
+  if(!ctx) return;
+  const puntos = keys
+    .map(k=>({ key:k, valor: fotos[k].cierre ?? fotos[k].inicio }))
+    .filter(p=>p.valor!=null);
+
+  const wrap = document.getElementById('port-foto-chart-wrap');
+  if(puntos.length < 2){
+    if(wrap) wrap.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:20px 0">Cargá al menos 2 meses para ver la evolución.</p>';
+    return;
+  }
+  // Restaurar canvas si antes se reemplazó por el mensaje de "cargá 2 meses"
+  if(!document.getElementById('port-foto-chart')){
+    wrap.innerHTML = '<canvas id="port-foto-chart"></canvas>';
+  }
+  const ctx2 = document.getElementById('port-foto-chart').getContext('2d');
+  const labels = puntos.map(p=>{
+    const [y,m] = p.key.split('-');
+    return `${PORT_MONTHS[Number(m)-1]} ${y.slice(2)}`;
+  });
+  if(_portFotoChart) _portFotoChart.destroy();
+  _portFotoChart = new Chart(ctx2,{
+    type:'line',
+    data:{ labels, datasets:[{
+      label:'Patrimonio (foto manual)',
+      data: puntos.map(p=>p.valor),
+      borderColor:'#4ade80', backgroundColor:'#4ade8022',
+      fill:true, tension:.35, pointRadius:3, pointBackgroundColor:'#4ade80', borderWidth:2,
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{
+        backgroundColor:'#191c26', borderColor:'#252936', borderWidth:1, titleColor:'#e8eaf2', bodyColor:'#4ade80',
+        callbacks:{ label:ctx=>portFmtARS(ctx.raw) }
+      }},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:10}}},
+        y:{grid:{color:'#252936'},ticks:{color:'#5a6080',font:{size:10},callback:v=>`$${(v/1000).toFixed(0)}k`}}
+      }
+    }
+  });
+}
 function portPopulateSelects(){
   const months=PORT_MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
-  ['port-res-month','port-aport-month','port-cajamov-month','port-infl-month'].forEach(id=>{
+  ['port-res-month','port-aport-month','port-cajamov-month','port-infl-month','port-foto-month'].forEach(id=>{
     const el=document.getElementById(id); if(el){el.innerHTML=months;el.value=PORT_NOW_M;}
   });
-  ['port-res-year','port-aport-year','port-cajamov-year','port-infl-year'].forEach(id=>{
+  ['port-res-year','port-aport-year','port-cajamov-year','port-infl-year','port-foto-year'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value=PORT_NOW_Y;
   });
   const nonPF=PORT_CAT_DEFS.slice(1).map(d=>`<option value="${d.id}">${d.icon} ${d.name}</option>`).join('');
@@ -3137,6 +3291,7 @@ function portRenderDash(){
   portRenderCharts();
   portRenderDollarRates();
   portRenderInflacion();
+  portRenderFoto();
 }
 function portRenderAll(){
   const active=document.querySelector('.port-tab.active')?.dataset?.tab||'pdash';
@@ -3216,9 +3371,12 @@ function portAddResult(){
   const tcInput=parseFloat(document.getElementById('port-res-tc').value);
   if(!catId||isNaN(gain)){showToast('Completá todos los campos','err');return;}
   const cs=portGetCatState(catId);
-  const tc=!isNaN(tcInput)&&tcInput>0?tcInput:PS().tc;
-  if(!PS().tcHistory) PS().tcHistory={};
-  PS().tcHistory[portTCKey(month,year)]=tc;
+  // El TC manual se guarda en el mapa por tipo de dólar de la categoría
+  // (dollarHistory), que es el que realmente usan los cálculos históricos.
+  // Antes se guardaba en un mapa separado (tcHistory) que ningún cálculo leía.
+  if(!isNaN(tcInput) && tcInput>0 && cs.currency==='USD'){
+    portSaveDollarForMonth(cs.usdType||'oficial', tcInput, month, year);
+  }
   if(!PS().results) PS().results=[];
   const id=PS().results.length?Math.max(...PS().results.map(r=>r.id))+1:1;
   PS().results.push({id,catId,month,year,gain,currency:cs.currency});
@@ -4144,7 +4302,7 @@ let _gastFilterYear = 'all';
 let _gastEditId     = null;
 let _gastChartMonth = new Date().getMonth();
 let _gastChartYear  = new Date().getFullYear();
-let _gastTrendYear  = new Date().getFullYear();
+let _gastBalanceYear = new Date().getFullYear();
 let _gastMonthCanvas= null;
 
 const gastToday = new Date();
@@ -4451,6 +4609,10 @@ function gastRenderMonthly() {
   const label=document.getElementById('gast-month-label');
   if(label) label.textContent=`${monthNames[_gastChartMonth]} ${_gastChartYear}`;
   gastRenderMonthlySummary();
+  // Si el mes activo cambió a un año distinto al que muestra el panorama anual,
+  // seguimos ese año para que la barra resaltada sea consistente.
+  if (_gastBalanceYear !== _gastChartYear) _gastBalanceYear = _gastChartYear;
+  gastRenderBalanceYear();
 
   const canvas=document.getElementById('gast-monthly-canvas');
   if(!canvas) return;
@@ -4514,7 +4676,6 @@ function gastRenderMonthly() {
   ctx.beginPath(); ctx.moveTo(padL,padT+cH); ctx.lineTo(W-padR,padT+cH); ctx.stroke();
 
   gastRenderMonthlyCats();
-  gastRenderTrendBars();
 }
 
 function gastRenderMonthlyCats() {
@@ -4553,34 +4714,112 @@ function gastRenderMonthlyCats() {
   </div>`;
 }
 
-function gastRenderTrendBars() {
-  const el=document.getElementById('gast-trend-bars');
-  if(!el) return;
-  const months=[];
-  for(let m=0;m<12;m++){
-    const key=gastMonthKey(_gastTrendYear,m);
-    const total=(GS().expenses||[]).filter(e=>e.date.startsWith(key)&&gastIsExpense(e)).reduce((s,e)=>s+e.amount,0);
-    const label=new Date(_gastTrendYear,m,1).toLocaleDateString('es-ES',{month:'short'}).slice(0,3);
-    months.push({total,label,m,isActive:m===_gastChartMonth&&_gastTrendYear===_gastChartYear});
-  }
-  const maxT=Math.max(...months.map(m=>m.total),1);
-  el.innerHTML=months.map(({total,label,m,isActive})=>{
-    const pct=total>0?Math.max((total/maxT)*100,6):2;
-    return `<div class="gast-trend-bar-wrap${isActive?' active-m':''}" onclick="gastJumpToMonth(${m},${_gastTrendYear})">
-      <div class="gast-trend-bar" style="height:${pct}%;background:${isActive?'var(--gastos)':(total>0?'#2a3a1a':'#1a1a1a')}"></div>
-      <div class="gast-trend-label" style="color:${isActive?'var(--gastos)':''}">${label}</div>
-    </div>`;
-  }).join('');
-}
-
 function gastChangeMonth(dir) {
   _gastChartMonth+=dir;
   if(_gastChartMonth>11){_gastChartMonth=0;_gastChartYear++;}
   if(_gastChartMonth<0) {_gastChartMonth=11;_gastChartYear--;}
-  _gastTrendYear=_gastChartYear;
   gastRenderMonthly();
 }
 function gastJumpToMonth(m,y){ _gastChartMonth=m; _gastChartYear=y; gastRenderMonthly(); }
+
+/* ── Panorama anual: balance mes a mes (déficit/superávit de un vistazo) ── */
+function gastChangeBalanceYear(dir) {
+  _gastBalanceYear += dir;
+  gastRenderBalanceYear();
+}
+
+function gastRenderBalanceYear() {
+  const yearLabel = document.getElementById('gast-balance-year-label');
+  if (yearLabel) yearLabel.textContent = _gastBalanceYear;
+
+  const months = [];
+  for (let m=0; m<12; m++) {
+    const key = gastMonthKey(_gastBalanceYear, m);
+    const items = (GS().expenses||[]).filter(e=>e.date.startsWith(key));
+    const exp = items.filter(gastIsExpense).reduce((s,e)=>s+e.amount,0);
+    const inc = items.filter(gastIsIncome).reduce((s,e)=>s+e.amount,0);
+    const sav = items.filter(gastIsSavings).reduce((s,e)=>s+e.amount,0);
+    const balance = inc - exp - sav;
+    const label = new Date(_gastBalanceYear, m, 1).toLocaleDateString('es-ES',{month:'short'}).slice(0,3);
+    const hasData = items.length > 0;
+    months.push({ balance, exp, inc, sav, label, m, hasData, isActive: m===_gastChartMonth && _gastBalanceYear===_gastChartYear });
+  }
+
+  // Resumen del año: cuántos meses en déficit vs superávit, y balance acumulado
+  const withData = months.filter(mm=>mm.hasData);
+  const mesesDeficit = withData.filter(mm=>mm.balance<0).length;
+  const mesesSuperavit = withData.filter(mm=>mm.balance>=0).length;
+  const balanceAcumAnual = months.reduce((s,mm)=>s+mm.balance,0);
+
+  const summaryEl = document.getElementById('gast-balance-summary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="card" style="padding:12px;border-top:2px solid var(--ok)">
+        <p class="card-label" style="margin-bottom:4px">Meses con superávit</p>
+        <p style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--ok)">${mesesSuperavit}</p>
+      </div>
+      <div class="card" style="padding:12px;border-top:2px solid var(--danger)">
+        <p class="card-label" style="margin-bottom:4px">Meses con déficit</p>
+        <p style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--danger)">${mesesDeficit}</p>
+      </div>
+      <div class="card" style="padding:12px;border-top:2px solid ${balanceAcumAnual>=0?'var(--gastos)':'var(--danger)'}">
+        <p class="card-label" style="margin-bottom:4px">Balance acumulado del año</p>
+        <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:${balanceAcumAnual>=0?'var(--gastos)':'var(--danger)'}">${balanceAcumAnual>=0?'+':''}${gastFmt(balanceAcumAnual)}</p>
+      </div>
+    `;
+  }
+
+  // Barras: positivo hacia arriba (verde), negativo hacia abajo (rojo), desde una línea central en 0
+  const el = document.getElementById('gast-balance-bars');
+  if (!el) return;
+  const maxAbs = Math.max(...months.map(mm=>Math.abs(mm.balance)), 1);
+
+  // Guardamos los datos del año actual para poder mostrar el detalle al tocar una barra
+  _gastBalanceMonthsData = months;
+
+  el.innerHTML = months.map(({balance, label, m, hasData, isActive}) => {
+    const pctHeight = hasData ? Math.max((Math.abs(balance)/maxAbs)*45, balance!==0 ? 4 : 0) : 0;
+    const isDeficit = balance < 0;
+    const color = !hasData ? '#1e1e1e' : (isDeficit ? 'var(--danger)' : 'var(--ok)');
+    const alignStyle = isDeficit
+      ? `margin-top:50%; height:${pctHeight}%;`
+      : `margin-bottom:50%; align-self:flex-end; height:${pctHeight}%;`;
+    return `<div class="gast-bal-bar-wrap${isActive?' active-m':''}" onclick="gastShowBalanceDetail(${m})">
+      <div class="gast-bal-bar-track">
+        <div class="gast-bal-zero-line"></div>
+        <div class="gast-bal-bar" style="background:${color}; ${alignStyle}"></div>
+      </div>
+      <div class="gast-bal-label">${label}</div>
+    </div>`;
+  }).join('');
+
+  // Mostrar el detalle del mes activo por defecto (o limpiar si no hay selección)
+  const detailEl = document.getElementById('gast-balance-detail');
+  if (detailEl) {
+    const activeMonth = months.find(mm=>mm.isActive && mm.hasData);
+    detailEl.innerHTML = activeMonth ? gastBalanceDetailHTML(activeMonth) : '';
+  }
+}
+
+let _gastBalanceMonthsData = [];
+
+function gastBalanceDetailHTML(mm) {
+  const balColor = mm.balance>=0 ? 'var(--gastos)' : 'var(--danger)';
+  return `<span style="color:var(--ok)">Ingreso: ${gastFmt(mm.inc)}</span> &nbsp;·&nbsp; <span style="color:#ff6b35">Gasto: ${gastFmt(mm.exp)}</span>${mm.sav>0?` &nbsp;·&nbsp; <span style="color:#a78bfa">Ahorro/Inv: ${gastFmt(mm.sav)}</span>`:''} &nbsp;·&nbsp; <span style="color:${balColor};font-weight:700">Balance: ${mm.balance>=0?'+':''}${gastFmt(mm.balance)}</span>`;
+}
+
+// Al tocar una barra: mostrar el detalle de ese mes debajo del gráfico,
+// y además saltar a verlo en el "Registro mensual" de arriba.
+function gastShowBalanceDetail(m) {
+  const mm = _gastBalanceMonthsData.find(x=>x.m===m);
+  const detailEl = document.getElementById('gast-balance-detail');
+  if (detailEl) {
+    detailEl.innerHTML = mm && mm.hasData
+      ? gastBalanceDetailHTML(mm)
+      : `<span style="color:var(--muted)">${mm?.label || ''}: sin datos cargados</span>`;
+  }
+  gastJumpToMonth(m, _gastBalanceYear);
+}
 
 /* ── Render all ── */
 function gastRenderAll() {
@@ -4589,6 +4828,7 @@ function gastRenderAll() {
   gastRenderWeekBars();
   gastRenderCatBreakdown();
   gastRenderMonthly();
+  gastRenderBalanceYear();
 }
 
 /* ── Init ── */
