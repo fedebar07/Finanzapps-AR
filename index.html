@@ -4303,6 +4303,7 @@ let _gastEditId     = null;
 let _gastChartMonth = new Date().getMonth();
 let _gastChartYear  = new Date().getFullYear();
 let _gastBalanceYear = new Date().getFullYear();
+let _gastBalanceMonthsData = [];
 let _gastMonthCanvas= null;
 
 const gastToday = new Date();
@@ -4609,9 +4610,10 @@ function gastRenderMonthly() {
   const label=document.getElementById('gast-month-label');
   if(label) label.textContent=`${monthNames[_gastChartMonth]} ${_gastChartYear}`;
   gastRenderMonthlySummary();
-  // Si el mes activo cambió a un año distinto al que muestra el panorama anual,
-  // seguimos ese año para que la barra resaltada sea consistente.
-  if (_gastBalanceYear !== _gastChartYear) _gastBalanceYear = _gastChartYear;
+  // El panorama anual navega de forma independiente (con sus propias flechas
+  // ‹ ›). Solo re-renderizamos para reflejar los datos actuales; NO forzamos
+  // el año a seguir al mes activo, porque eso deshacía la navegación manual
+  // del usuario cada vez que se re-renderizaba la pantalla (ej. al cargar un gasto).
   gastRenderBalanceYear();
 
   const canvas=document.getElementById('gast-monthly-canvas');
@@ -4746,10 +4748,15 @@ function gastRenderBalanceYear() {
   }
 
   // Resumen del año: cuántos meses en déficit vs superávit, y balance acumulado
+  // Solo se suman los meses que tienen algún registro cargado, para que el
+  // "acumulado" no incluya meses futuros vacíos (que sumarían 0 y podrían
+  // confundirse con "todavía no hay déficit ni superávit" cuando en realidad
+  // es "todavía no llegaste a ese mes").
   const withData = months.filter(mm=>mm.hasData);
   const mesesDeficit = withData.filter(mm=>mm.balance<0).length;
   const mesesSuperavit = withData.filter(mm=>mm.balance>=0).length;
-  const balanceAcumAnual = months.reduce((s,mm)=>s+mm.balance,0);
+  const balanceAcumAnual = withData.reduce((s,mm)=>s+mm.balance,0);
+  const cantMesesConDatos = withData.length;
 
   const summaryEl = document.getElementById('gast-balance-summary');
   if (summaryEl) {
@@ -4763,7 +4770,7 @@ function gastRenderBalanceYear() {
         <p style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--danger)">${mesesDeficit}</p>
       </div>
       <div class="card" style="padding:12px;border-top:2px solid ${balanceAcumAnual>=0?'var(--gastos)':'var(--danger)'}">
-        <p class="card-label" style="margin-bottom:4px">Balance acumulado del año</p>
+        <p class="card-label" style="margin-bottom:4px">Balance de los ${cantMesesConDatos} meses cargados</p>
         <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:${balanceAcumAnual>=0?'var(--gastos)':'var(--danger)'}">${balanceAcumAnual>=0?'+':''}${gastFmt(balanceAcumAnual)}</p>
       </div>
     `;
@@ -4801,8 +4808,6 @@ function gastRenderBalanceYear() {
   }
 }
 
-let _gastBalanceMonthsData = [];
-
 function gastBalanceDetailHTML(mm) {
   const balColor = mm.balance>=0 ? 'var(--gastos)' : 'var(--danger)';
   return `<span style="color:var(--ok)">Ingreso: ${gastFmt(mm.inc)}</span> &nbsp;·&nbsp; <span style="color:#ff6b35">Gasto: ${gastFmt(mm.exp)}</span>${mm.sav>0?` &nbsp;·&nbsp; <span style="color:#a78bfa">Ahorro/Inv: ${gastFmt(mm.sav)}</span>`:''} &nbsp;·&nbsp; <span style="color:${balColor};font-weight:700">Balance: ${mm.balance>=0?'+':''}${gastFmt(mm.balance)}</span>`;
@@ -4827,8 +4832,7 @@ function gastRenderAll() {
   gastRenderList();
   gastRenderWeekBars();
   gastRenderCatBreakdown();
-  gastRenderMonthly();
-  gastRenderBalanceYear();
+  gastRenderMonthly(); // ya renderiza el panorama anual internamente
 }
 
 /* ── Init ── */
