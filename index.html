@@ -1660,8 +1660,11 @@
       <p style="font-size:11px;color:var(--muted);margin-bottom:14px">De un vistazo: en qué meses gastaste más de lo que ingresó (déficit, en rojo) y en cuáles te sobró (superávit, en verde). Tocá una barra para ver el detalle de gasto e ingreso de ese mes.</p>
       <div class="gast-collapsible" id="gast-balance-wrap">
         <div id="gast-balance-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px"></div>
-        <div id="gast-balance-bars" style="display:flex;align-items:flex-end;gap:6px;height:130px;margin-bottom:8px"></div>
-        <div id="gast-balance-detail" style="font-size:11px;color:var(--muted);text-align:center;min-height:16px"></div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:8px;height:130px">
+          <div id="gast-balance-scale" style="display:flex;flex-direction:column;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted);text-align:right;white-space:nowrap"></div>
+          <div id="gast-balance-bars" style="display:flex;align-items:flex-end;gap:6px"></div>
+        </div>
+        <div id="gast-balance-detail" style="font-size:11px;color:var(--muted);text-align:center;min-height:16px;margin-top:8px"></div>
       </div>
     </div>
 
@@ -4316,9 +4319,13 @@ const gastIsExpense = e => !gastIsIncome(e) && !gastIsSavings(e);
 /* ── Formato ── */
 function gastFmt(n) { return '$'+n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function gastFmtShort(n) {
-  if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M';
-  if(n>=1000) return '$'+(n/1000).toFixed(1)+'k';
-  return '$'+Math.round(n).toLocaleString('es-AR');
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  // Convención de toda la app: el símbolo $ va antes del signo negativo (ej. "$-300.0k"),
+  // igual que gastFmt() con toLocaleString('es-AR').
+  if(abs>=1e6) return '$'+sign+(abs/1e6).toFixed(1)+'M';
+  if(abs>=1000) return '$'+sign+(abs/1000).toFixed(1)+'k';
+  return '$'+sign+Math.round(abs).toLocaleString('es-AR');
 }
 function gastMonthKey(y,m) { return `${y}-${String(m+1).padStart(2,'0')}`; }
 
@@ -4779,14 +4786,34 @@ function gastRenderBalanceYear() {
   // Barras: positivo hacia arriba (verde), negativo hacia abajo (rojo), desde una línea central en 0
   const el = document.getElementById('gast-balance-bars');
   if (!el) return;
-  const maxAbs = Math.max(...months.map(mm=>Math.abs(mm.balance)), 1);
+
+  // Escala de referencia: el mayor superávit y el mayor déficit del año.
+  const maxPositivo = Math.max(...months.filter(mm=>mm.hasData).map(mm=>mm.balance), 0);
+  const maxNegativo = Math.min(...months.filter(mm=>mm.hasData).map(mm=>mm.balance), 0);
+  const scaleEl = document.getElementById('gast-balance-scale');
+  if (scaleEl) {
+    scaleEl.innerHTML = `
+      <span style="color:var(--ok)">${maxPositivo>0?'+'+gastFmtShort(maxPositivo):'$0'}</span>
+      <span style="color:var(--dimmed)">$0</span>
+      <span style="color:var(--danger)">${maxNegativo<0?gastFmtShort(maxNegativo):'$0'}</span>
+    `;
+  }
+
+  // IMPORTANTE: escalamos cada mitad del gráfico por separado (positiva y
+  // negativa), en vez de usar un único máximo absoluto para ambas. Así, la
+  // etiqueta de arriba SIEMPRE corresponde a la barra más alta hacia arriba
+  // (100% de esa mitad), y lo mismo para la de abajo — sin importar si el
+  // mayor superávit y el mayor déficit del año son de magnitud muy distinta.
+  const escalaPositiva = maxPositivo > 0 ? maxPositivo : 1;
+  const escalaNegativa = maxNegativo < 0 ? Math.abs(maxNegativo) : 1;
 
   // Guardamos los datos del año actual para poder mostrar el detalle al tocar una barra
   _gastBalanceMonthsData = months;
 
   el.innerHTML = months.map(({balance, label, m, hasData, isActive}) => {
-    const pctHeight = hasData ? Math.max((Math.abs(balance)/maxAbs)*45, balance!==0 ? 4 : 0) : 0;
     const isDeficit = balance < 0;
+    const escala = isDeficit ? escalaNegativa : escalaPositiva;
+    const pctHeight = hasData ? Math.max((Math.abs(balance)/escala)*45, balance!==0 ? 4 : 0) : 0;
     const color = !hasData ? '#1e1e1e' : (isDeficit ? 'var(--danger)' : 'var(--ok)');
     const alignStyle = isDeficit
       ? `margin-top:50%; height:${pctHeight}%;`
