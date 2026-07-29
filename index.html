@@ -837,22 +837,28 @@
     /* Barras de balance anual (positivo hacia arriba, negativo hacia abajo desde el centro) */
     .gast-bal-bar-wrap {
       flex:1; display:flex; flex-direction:column; align-items:center;
-      height:100%; position:relative; cursor:pointer;
+      justify-content:center; height:100%; position:relative; cursor:pointer;
+      border-radius:6px; transition:background .15s;
     }
+    .gast-bal-bar-wrap:hover { background:rgba(255,255,255,.04); }
+    .gast-bal-bar-wrap.active-m { background:rgba(232,255,71,.08); }
     .gast-bal-bar-track {
       position:relative; width:100%; height:100%;
-      display:flex; flex-direction:column; justify-content:center;
+      display:flex; flex-direction:column; justify-content:center; align-items:center;
     }
     .gast-bal-bar {
-      width:100%; border-radius:2px; min-height:2px; transition:all .3s ease;
+      width:70%; border-radius:3px; min-height:2px; transition:all .3s ease;
     }
     .gast-bal-zero-line {
-      position:absolute; left:0; right:0; top:50%; height:1px; background:var(--border);
+      position:absolute; left:4px; right:4px; top:50%; height:1px; background:var(--border); z-index:0;
     }
-    .gast-bal-label {
-      font-family:var(--mono); font-size:9px; color:var(--muted); text-align:center; margin-top:4px;
+    .gast-bal-month-cell {
+      flex:1; font-family:var(--mono); font-size:10px; color:var(--muted);
+      text-align:center; cursor:pointer; padding:3px 0; border-radius:5px; transition:all .15s;
     }
-    .gast-bal-bar-wrap.active-m .gast-bal-label { color:var(--gastos); font-weight:700; }
+    .gast-bal-month-cell:hover { background:rgba(255,255,255,.04); }
+    .gast-bal-month-cell.active-m { color:var(--gastos); font-weight:700; background:rgba(232,255,71,.08); }
+    .gast-bal-month-cell.no-data { color:var(--dimmed); }
     @media(max-width:700px) {
       #section-gastos .grid-2 { grid-template-columns:1fr; }
       #gast-monthly-summary { grid-template-columns:1fr 1fr !important; }
@@ -1660,11 +1666,14 @@
       <p style="font-size:11px;color:var(--muted);margin-bottom:14px">De un vistazo: en qué meses gastaste más de lo que ingresó (déficit, en rojo) y en cuáles te sobró (superávit, en verde). Tocá una barra para ver el detalle de gasto e ingreso de ese mes.</p>
       <div class="gast-collapsible" id="gast-balance-wrap">
         <div id="gast-balance-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px"></div>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:8px;height:130px">
-          <div id="gast-balance-scale" style="display:flex;flex-direction:column;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted);text-align:right;white-space:nowrap"></div>
-          <div id="gast-balance-bars" style="display:flex;align-items:flex-end;gap:6px"></div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:8px">
+          <div id="gast-balance-scale" style="display:flex;flex-direction:column;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted);text-align:right;white-space:nowrap;height:120px"></div>
+          <div>
+            <div id="gast-balance-bars" style="display:flex;align-items:stretch;gap:6px;height:120px"></div>
+            <div id="gast-balance-months" style="display:flex;gap:6px;margin-top:6px"></div>
+          </div>
         </div>
-        <div id="gast-balance-detail" style="font-size:11px;color:var(--muted);text-align:center;min-height:16px;margin-top:8px"></div>
+        <div id="gast-balance-detail" style="font-size:11px;color:var(--muted);text-align:center;min-height:16px;margin-top:10px;padding:8px;background:var(--surface);border-radius:8px"></div>
       </div>
     </div>
 
@@ -4810,22 +4819,30 @@ function gastRenderBalanceYear() {
   // Guardamos los datos del año actual para poder mostrar el detalle al tocar una barra
   _gastBalanceMonthsData = months;
 
-  el.innerHTML = months.map(({balance, label, m, hasData, isActive}) => {
+  el.innerHTML = months.map(({balance, m, hasData, isActive}) => {
     const isDeficit = balance < 0;
     const escala = isDeficit ? escalaNegativa : escalaPositiva;
     const pctHeight = hasData ? Math.max((Math.abs(balance)/escala)*45, balance!==0 ? 4 : 0) : 0;
-    const color = !hasData ? '#1e1e1e' : (isDeficit ? 'var(--danger)' : 'var(--ok)');
+    const color = !hasData ? '#252936' : (isDeficit ? 'var(--danger)' : 'var(--ok)');
     const alignStyle = isDeficit
       ? `margin-top:50%; height:${pctHeight}%;`
-      : `margin-bottom:50%; align-self:flex-end; height:${pctHeight}%;`;
+      : `margin-bottom:50%; align-self:center; height:${pctHeight}%;`;
     return `<div class="gast-bal-bar-wrap${isActive?' active-m':''}" onclick="gastShowBalanceDetail(${m})">
       <div class="gast-bal-bar-track">
         <div class="gast-bal-zero-line"></div>
         <div class="gast-bal-bar" style="background:${color}; ${alignStyle}"></div>
       </div>
-      <div class="gast-bal-label">${label}</div>
     </div>`;
   }).join('');
+
+  // Fila separada con los nombres de mes, cada uno alineado bajo su propia barra
+  const monthsEl = document.getElementById('gast-balance-months');
+  if (monthsEl) {
+    monthsEl.innerHTML = months.map(({label, m, hasData, isActive}) => `
+      <div class="gast-bal-month-cell${isActive?' active-m':''}${!hasData?' no-data':''}"
+        onclick="gastShowBalanceDetail(${m})">${label}</div>
+    `).join('');
+  }
 
   // Mostrar el detalle del mes activo por defecto (o limpiar si no hay selección)
   const detailEl = document.getElementById('gast-balance-detail');
@@ -4837,7 +4854,7 @@ function gastRenderBalanceYear() {
 
 function gastBalanceDetailHTML(mm) {
   const balColor = mm.balance>=0 ? 'var(--gastos)' : 'var(--danger)';
-  return `<span style="color:var(--ok)">Ingreso: ${gastFmt(mm.inc)}</span> &nbsp;·&nbsp; <span style="color:#ff6b35">Gasto: ${gastFmt(mm.exp)}</span>${mm.sav>0?` &nbsp;·&nbsp; <span style="color:#a78bfa">Ahorro/Inv: ${gastFmt(mm.sav)}</span>`:''} &nbsp;·&nbsp; <span style="color:${balColor};font-weight:700">Balance: ${mm.balance>=0?'+':''}${gastFmt(mm.balance)}</span>`;
+  return `<div style="font-weight:700;color:var(--text);margin-bottom:4px;text-transform:capitalize">${mm.label} ${_gastBalanceYear}</div><span style="color:var(--ok)">Ingreso: ${gastFmt(mm.inc)}</span> &nbsp;·&nbsp; <span style="color:#ff6b35">Gasto: ${gastFmt(mm.exp)}</span>${mm.sav>0?` &nbsp;·&nbsp; <span style="color:#a78bfa">Ahorro/Inv: ${gastFmt(mm.sav)}</span>`:''} &nbsp;·&nbsp; <span style="color:${balColor};font-weight:700">Balance: ${mm.balance>=0?'+':''}${gastFmt(mm.balance)}</span>`;
 }
 
 // Al tocar una barra: mostrar el detalle de ese mes debajo del gráfico,
