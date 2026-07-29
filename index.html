@@ -4822,8 +4822,11 @@ function gastRenderBalanceYear() {
   el.innerHTML = months.map(({balance, m, hasData, isActive}) => {
     const isDeficit = balance < 0;
     const escala = isDeficit ? escalaNegativa : escalaPositiva;
-    const pctHeight = hasData ? Math.max((Math.abs(balance)/escala)*45, balance!==0 ? 4 : 0) : 0;
-    const color = !hasData ? '#252936' : (isDeficit ? 'var(--danger)' : 'var(--ok)');
+    // Un solo rectángulo por mes: crece hacia arriba en verde si hubo superávit,
+    // hacia abajo en rojo si hubo déficit, o queda invisible (altura 0) si no
+    // hay datos o el balance dio exactamente $0.
+    const pctHeight = (hasData && balance !== 0) ? Math.max((Math.abs(balance)/escala)*45, 4) : 0;
+    const color = (!hasData || balance === 0) ? '#252936' : (isDeficit ? 'var(--danger)' : 'var(--ok)');
     const alignStyle = isDeficit
       ? `margin-top:50%; height:${pctHeight}%;`
       : `margin-bottom:50%; align-self:center; height:${pctHeight}%;`;
