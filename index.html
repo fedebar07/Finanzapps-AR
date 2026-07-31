@@ -270,8 +270,9 @@
     .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 
     .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+    .grid-6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
 
-    @media (max-width: 700px) { .grid-5 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px) { .grid-5 { grid-template-columns: 1fr 1fr; } .grid-6 { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 600px) {
       .grid-4 { grid-template-columns: 1fr 1fr; }
       .grid-3 { grid-template-columns: 1fr 1fr; }
@@ -838,26 +839,30 @@
     .gast-bal-bar-wrap {
       flex:1; display:flex; flex-direction:column; align-items:center;
       justify-content:center; height:100%; position:relative; cursor:pointer;
-      border-radius:6px; transition:background .15s;
     }
-    .gast-bal-bar-wrap:hover { background:rgba(255,255,255,.04); }
-    .gast-bal-bar-wrap.active-m { background:rgba(232,255,71,.08); }
+    .gast-bal-bar-wrap:hover .gast-bal-bar-track { background:rgba(255,255,255,.03); border-radius:6px; }
     .gast-bal-bar-track {
       position:relative; width:100%; height:100%;
       display:flex; flex-direction:column; justify-content:center; align-items:center;
     }
+    /* El mes activo se marca SOLO con una línea fina abajo (no un fondo de área
+       completa), para que nunca se confunda visualmente con un rectángulo de barra real. */
+    .gast-bal-bar-wrap.active-m .gast-bal-bar-track::after {
+      content:''; position:absolute; left:15%; right:15%; bottom:-6px; height:2px;
+      background:var(--gastos); border-radius:2px;
+    }
     .gast-bal-bar {
-      width:70%; border-radius:3px; min-height:2px; transition:all .3s ease;
+      width:60%; border-radius:3px; min-height:2px; transition:all .3s ease;
     }
     .gast-bal-zero-line {
-      position:absolute; left:4px; right:4px; top:50%; height:1px; background:var(--border); z-index:0;
+      position:absolute; left:2px; right:2px; top:50%; height:1px; background:var(--border); z-index:0;
     }
     .gast-bal-month-cell {
       flex:1; font-family:var(--mono); font-size:10px; color:var(--muted);
       text-align:center; cursor:pointer; padding:3px 0; border-radius:5px; transition:all .15s;
     }
     .gast-bal-month-cell:hover { background:rgba(255,255,255,.04); }
-    .gast-bal-month-cell.active-m { color:var(--gastos); font-weight:700; background:rgba(232,255,71,.08); }
+    .gast-bal-month-cell.active-m { color:var(--gastos); font-weight:700; }
     .gast-bal-month-cell.no-data { color:var(--dimmed); }
     @media(max-width:700px) {
       #section-gastos .grid-2 { grid-template-columns:1fr; }
@@ -1481,7 +1486,7 @@
   <div class="content">
 
     <!-- Resumen -->
-    <div class="grid-5" id="gast-summary" style="margin-bottom:14px"></div>
+    <div class="grid-6" id="gast-summary" style="margin-bottom:14px"></div>
 
     <!-- Inflación -->
     <div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
@@ -1670,7 +1675,7 @@
           <div id="gast-balance-scale" style="display:flex;flex-direction:column;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted);text-align:right;white-space:nowrap;height:120px"></div>
           <div>
             <div id="gast-balance-bars" style="display:flex;align-items:stretch;gap:6px;height:120px"></div>
-            <div id="gast-balance-months" style="display:flex;gap:6px;margin-top:6px"></div>
+            <div id="gast-balance-months" style="display:flex;gap:6px;margin-top:10px"></div>
           </div>
         </div>
         <div id="gast-balance-detail" style="font-size:11px;color:var(--muted);text-align:center;min-height:16px;margin-top:10px;padding:8px;background:var(--surface);border-radius:8px"></div>
@@ -4439,12 +4444,22 @@ function gastRenderSummary() {
 
   const nomChange = prevExp>0 ? ((thisExp-prevExp)/prevExp*100) : null;
 
+  // Presupuesto del mes = Ingreso − Ahorro/Inversión.
+  // Es "cuánto tenías para gastar" antes de empezar a gastar, ya descontando
+  // lo que decidiste apartar como ahorro o inversión. Distinto del "Balance",
+  // que es el resultado real después de gastar.
+  const presupuesto = thisInc - thisSav;
+  const usadoPct = presupuesto > 0 ? (thisExp / presupuesto) * 100 : null;
+
   const cards = [
     {label:'Mes anterior',    val:gastFmt(prevExp),  color:'#94a3b8', key:'prev'},
     {label:'Gasto del mes',   val:gastFmt(thisExp),  color:'#ff6b35', key:'month',
       sub: nomChange!==null ? `${nomChange>0?'▲':'▼'} ${Math.abs(nomChange).toFixed(1)}% vs anterior` : ''},
     {label:'Ingresos del mes',val:gastFmt(thisInc),  color:'var(--ok)', key:'inc'},
     {label:'Ahorro/Inv. del mes', val:gastFmt(thisSav), color:'#a78bfa', key:'sav'},
+    {label:'Presupuesto', val:gastFmt(presupuesto), color:presupuesto<0?'var(--danger)':'#38bdf8', key:'pres',
+      title:'Ingreso menos Ahorro/Inversión: lo que tenías disponible para gastar este mes',
+      sub: usadoPct!==null ? `${usadoPct.toFixed(0)}% usado en gastos` : ''},
     {label:'Disponible total',val:gastFmt(balance),  color:balance<0?'var(--danger)':'var(--gastos)', key:'bal',
       title:'Acumulado desde el primer registro'},
   ];
@@ -4453,7 +4468,7 @@ function gastRenderSummary() {
     <div class="card" style="padding:14px;border-top:2px solid ${c.color}" ${c.title?`title="${c.title}"`:''}">
       <p class="card-label">${c.label}</p>
       <p style="font-family:var(--mono);font-size:18px;font-weight:700;color:${c.color}">${c.val}</p>
-      ${c.sub?`<p style="font-size:10px;color:${nomChange>0?'var(--danger)':'var(--ok)'};margin-top:3px">${c.sub}</p>`:''}
+      ${c.sub?`<p style="font-size:10px;color:${c.key==='month'?(nomChange>0?'var(--danger)':'var(--ok)'):(c.key==='pres'&&usadoPct>100?'var(--danger)':'var(--muted)')};margin-top:3px">${c.sub}</p>`:''}
     </div>`).join('');
 
   // Inflación
