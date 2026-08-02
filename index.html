@@ -835,35 +835,6 @@
     .gast-week-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; gap:2px; }
     .gast-week-bar { width:100%; border-radius:3px 3px 0 0; transition:height .3s ease; }
     .gast-week-label { font-family:var(--mono); font-size:9px; color:var(--muted); }
-    /* Barras de balance anual (positivo hacia arriba, negativo hacia abajo desde el centro) */
-    .gast-bal-bar-wrap {
-      flex:1; display:flex; flex-direction:column; align-items:center;
-      justify-content:center; height:100%; position:relative; cursor:pointer;
-    }
-    .gast-bal-bar-wrap:hover .gast-bal-bar-track { background:rgba(255,255,255,.03); border-radius:6px; }
-    .gast-bal-bar-track {
-      position:relative; width:100%; height:100%;
-      display:flex; flex-direction:column; justify-content:center; align-items:center;
-    }
-    /* El mes activo se marca SOLO con una línea fina abajo (no un fondo de área
-       completa), para que nunca se confunda visualmente con un rectángulo de barra real. */
-    .gast-bal-bar-wrap.active-m .gast-bal-bar-track::after {
-      content:''; position:absolute; left:15%; right:15%; bottom:-6px; height:2px;
-      background:var(--gastos); border-radius:2px;
-    }
-    .gast-bal-bar {
-      width:60%; border-radius:3px; min-height:2px; transition:all .3s ease;
-    }
-    .gast-bal-zero-line {
-      position:absolute; left:2px; right:2px; top:50%; height:1px; background:var(--border); z-index:0;
-    }
-    .gast-bal-month-cell {
-      flex:1; font-family:var(--mono); font-size:10px; color:var(--muted);
-      text-align:center; cursor:pointer; padding:3px 0; border-radius:5px; transition:all .15s;
-    }
-    .gast-bal-month-cell:hover { background:rgba(255,255,255,.04); }
-    .gast-bal-month-cell.active-m { color:var(--gastos); font-weight:700; }
-    .gast-bal-month-cell.no-data { color:var(--dimmed); }
     @media(max-width:700px) {
       #section-gastos .grid-2 { grid-template-columns:1fr; }
       #gast-monthly-summary { grid-template-columns:1fr 1fr !important; }
@@ -1657,10 +1628,10 @@
       </div>
     </div>
 
-    <!-- Panorama anual: balance mes a mes, con gasto e ingreso al tocar cada barra -->
+    <!-- Balance mensual del año (línea) -->
     <div class="card" style="margin-top:20px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
-        <p style="font-size:15px;font-weight:700">Panorama del año</p>
+        <p style="font-size:15px;font-weight:700">Balance de cada mes</p>
         <div style="display:flex;align-items:center;gap:8px">
           <button class="btn btn-outline btn-sm" onclick="gastChangeBalanceYear(-1)">‹</button>
           <span id="gast-balance-year-label" style="font-family:var(--mono);font-size:13px;min-width:50px;text-align:center"></span>
@@ -1668,17 +1639,23 @@
           <button class="gast-toggle-btn" onclick="gastToggleSection('gast-balance-wrap', this)">ocultar</button>
         </div>
       </div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:14px">De un vistazo: en qué meses gastaste más de lo que ingresó (déficit, en rojo) y en cuáles te sobró (superávit, en verde). Tocá una barra para ver el detalle de gasto e ingreso de ese mes.</p>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Ingreso menos gasto menos ahorro/inversión de cada mes. Por encima de $0 es superávit, por debajo es déficit.</p>
       <div class="gast-collapsible" id="gast-balance-wrap">
         <div id="gast-balance-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px"></div>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:8px">
-          <div id="gast-balance-scale" style="display:flex;flex-direction:column;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted);text-align:right;white-space:nowrap;height:120px"></div>
-          <div>
-            <div id="gast-balance-bars" style="display:flex;align-items:stretch;gap:6px;height:120px"></div>
-            <div id="gast-balance-months" style="display:flex;gap:6px;margin-top:10px"></div>
-          </div>
-        </div>
+        <div style="position:relative;height:200px"><canvas id="gast-balance-chart"></canvas></div>
         <div id="gast-balance-detail" style="font-size:11px;color:var(--muted);text-align:center;min-height:16px;margin-top:10px;padding:8px;background:var(--surface);border-radius:8px"></div>
+      </div>
+    </div>
+
+    <!-- Acumulado del año (barras) -->
+    <div class="card" style="margin-top:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+        <p style="font-size:15px;font-weight:700">Acumulado del año</p>
+        <button class="gast-toggle-btn" onclick="gastToggleSection('gast-acum-wrap', this)">ocultar</button>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Suma de los balances mes a mes desde enero. Si la barra crece, vas ganando terreno en el año; si baja, lo estás perdiendo.</p>
+      <div class="gast-collapsible" id="gast-acum-wrap">
+        <div style="position:relative;height:200px"><canvas id="gast-acum-chart"></canvas></div>
       </div>
     </div>
 
@@ -1768,8 +1745,6 @@
               <option value="poder_adquisitivo">Poder adquisitivo — ¿cuántas CBT cubre el RIPTE?</option>
             </optgroup>
             <optgroup label="── Sectorial ──">
-              <option value="acara">ACARA — Patentamientos de autos 0km (unidades)</option>
-              <option value="acara_ia">ACARA — Variación interanual (%)</option>
               <option value="afcp">AFCP — Despachos de cemento (miles de toneladas)</option>
               <option value="afcp_ia">AFCP — Variación interanual (%)</option>
               <option value="uci">UCI — Uso de la capacidad instalada industrial (%)</option>
@@ -4755,7 +4730,10 @@ function gastChangeMonth(dir) {
 }
 function gastJumpToMonth(m,y){ _gastChartMonth=m; _gastChartYear=y; gastRenderMonthly(); }
 
-/* ── Panorama anual: balance mes a mes (déficit/superávit de un vistazo) ── */
+/* ── Balance de cada mes (línea) + Acumulado del año (barras) ── */
+let _gastBalanceChart = null;
+let _gastAcumChart = null;
+
 function gastChangeBalanceYear(dir) {
   _gastBalanceYear += dir;
   gastRenderBalanceYear();
@@ -4775,14 +4753,12 @@ function gastRenderBalanceYear() {
     const balance = inc - exp - sav;
     const label = new Date(_gastBalanceYear, m, 1).toLocaleDateString('es-ES',{month:'short'}).slice(0,3);
     const hasData = items.length > 0;
-    months.push({ balance, exp, inc, sav, label, m, hasData, isActive: m===_gastChartMonth && _gastBalanceYear===_gastChartYear });
+    months.push({ balance, exp, inc, sav, label, m, hasData });
   }
+  _gastBalanceMonthsData = months;
 
-  // Resumen del año: cuántos meses en déficit vs superávit, y balance acumulado
-  // Solo se suman los meses que tienen algún registro cargado, para que el
-  // "acumulado" no incluya meses futuros vacíos (que sumarían 0 y podrían
-  // confundirse con "todavía no hay déficit ni superávit" cuando en realidad
-  // es "todavía no llegaste a ese mes").
+  // Resumen del año: cuántos meses en déficit vs superávit, y balance acumulado.
+  // Solo se cuentan los meses con algún registro cargado.
   const withData = months.filter(mm=>mm.hasData);
   const mesesDeficit = withData.filter(mm=>mm.balance<0).length;
   const mesesSuperavit = withData.filter(mm=>mm.balance>=0).length;
@@ -4807,67 +4783,142 @@ function gastRenderBalanceYear() {
     `;
   }
 
-  // Barras: positivo hacia arriba (verde), negativo hacia abajo (rojo), desde una línea central en 0
-  const el = document.getElementById('gast-balance-bars');
-  if (!el) return;
+  gastRenderBalanceLineChart(months);
+  gastRenderAcumBarChart(months);
 
-  // Escala de referencia: el mayor superávit y el mayor déficit del año.
-  const maxPositivo = Math.max(...months.filter(mm=>mm.hasData).map(mm=>mm.balance), 0);
-  const maxNegativo = Math.min(...months.filter(mm=>mm.hasData).map(mm=>mm.balance), 0);
-  const scaleEl = document.getElementById('gast-balance-scale');
-  if (scaleEl) {
-    scaleEl.innerHTML = `
-      <span style="color:var(--ok)">${maxPositivo>0?'+'+gastFmtShort(maxPositivo):'$0'}</span>
-      <span style="color:var(--dimmed)">$0</span>
-      <span style="color:var(--danger)">${maxNegativo<0?gastFmtShort(maxNegativo):'$0'}</span>
-    `;
-  }
-
-  // IMPORTANTE: escalamos cada mitad del gráfico por separado (positiva y
-  // negativa), en vez de usar un único máximo absoluto para ambas. Así, la
-  // etiqueta de arriba SIEMPRE corresponde a la barra más alta hacia arriba
-  // (100% de esa mitad), y lo mismo para la de abajo — sin importar si el
-  // mayor superávit y el mayor déficit del año son de magnitud muy distinta.
-  const escalaPositiva = maxPositivo > 0 ? maxPositivo : 1;
-  const escalaNegativa = maxNegativo < 0 ? Math.abs(maxNegativo) : 1;
-
-  // Guardamos los datos del año actual para poder mostrar el detalle al tocar una barra
-  _gastBalanceMonthsData = months;
-
-  el.innerHTML = months.map(({balance, m, hasData, isActive}) => {
-    const isDeficit = balance < 0;
-    const escala = isDeficit ? escalaNegativa : escalaPositiva;
-    // Un solo rectángulo por mes: crece hacia arriba en verde si hubo superávit,
-    // hacia abajo en rojo si hubo déficit, o queda invisible (altura 0) si no
-    // hay datos o el balance dio exactamente $0.
-    const pctHeight = (hasData && balance !== 0) ? Math.max((Math.abs(balance)/escala)*45, 4) : 0;
-    const color = (!hasData || balance === 0) ? '#252936' : (isDeficit ? 'var(--danger)' : 'var(--ok)');
-    const alignStyle = isDeficit
-      ? `margin-top:50%; height:${pctHeight}%;`
-      : `margin-bottom:50%; align-self:center; height:${pctHeight}%;`;
-    return `<div class="gast-bal-bar-wrap${isActive?' active-m':''}" onclick="gastShowBalanceDetail(${m})">
-      <div class="gast-bal-bar-track">
-        <div class="gast-bal-zero-line"></div>
-        <div class="gast-bal-bar" style="background:${color}; ${alignStyle}"></div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // Fila separada con los nombres de mes, cada uno alineado bajo su propia barra
-  const monthsEl = document.getElementById('gast-balance-months');
-  if (monthsEl) {
-    monthsEl.innerHTML = months.map(({label, m, hasData, isActive}) => `
-      <div class="gast-bal-month-cell${isActive?' active-m':''}${!hasData?' no-data':''}"
-        onclick="gastShowBalanceDetail(${m})">${label}</div>
-    `).join('');
-  }
-
-  // Mostrar el detalle del mes activo por defecto (o limpiar si no hay selección)
+  // Detalle del mes activo (si pertenece al año que se está mostrando)
   const detailEl = document.getElementById('gast-balance-detail');
   if (detailEl) {
-    const activeMonth = months.find(mm=>mm.isActive && mm.hasData);
+    const activeMonth = months.find(mm=>mm.m===_gastChartMonth && _gastBalanceYear===_gastChartYear && mm.hasData);
     detailEl.innerHTML = activeMonth ? gastBalanceDetailHTML(activeMonth) : '';
   }
+}
+
+// Gráfico 1: línea con el balance de cada mes (sube y baja según superávit/déficit)
+function gastRenderBalanceLineChart(months) {
+  const ctx = document.getElementById('gast-balance-chart')?.getContext('2d');
+  if (!ctx) return;
+  if (_gastBalanceChart) _gastBalanceChart.destroy();
+
+  // Solo se grafican los meses con datos, para que la línea no se desplome a
+  // $0 en los meses futuros todavía sin cargar.
+  const withData = months.filter(mm=>mm.hasData);
+  const dataPoints = months.map(mm => mm.hasData ? mm.balance : null);
+
+  _gastBalanceChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: months.map(mm=>mm.label),
+      datasets: [{
+        label: 'Balance del mes',
+        data: dataPoints,
+        spanGaps: false,
+        segment: {
+          borderColor: ctx => {
+            const v = ctx.p1.parsed.y;
+            return v < 0 ? '#f85149' : '#4ade80';
+          }
+        },
+        pointBackgroundColor: ctx => {
+          const v = ctx.raw;
+          if (v == null) return 'transparent';
+          return v < 0 ? '#f85149' : '#4ade80';
+        },
+        pointRadius: ctx => ctx.raw == null ? 0 : 4,
+        pointHoverRadius: 6,
+        borderWidth: 2.5,
+        tension: 0.25,
+        fill: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick: (evt, elements) => {
+        if (elements.length) gastShowBalanceDetail(elements[0].index);
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#191c26', borderColor: '#252936', borderWidth: 1,
+          titleColor: '#e8eaf2', bodyColor: '#e8eaf2',
+          callbacks: {
+            label: ctx => ctx.raw == null ? 'Sin datos' : (ctx.raw>=0?'+':'')+gastFmt(ctx.raw)
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#5a6080', font: { size: 10 } } },
+        y: {
+          grid: {
+            color: ctx => ctx.tick.value === 0 ? '#5a6080' : '#252936',
+          },
+          ticks: { color: '#5a6080', font: { size: 10 }, callback: v => gastFmtShort(v) }
+        }
+      }
+    }
+  });
+}
+
+// Gráfico 2: barras con el acumulado del año (suma corrida mes a mes desde enero)
+function gastRenderAcumBarChart(months) {
+  const ctx = document.getElementById('gast-acum-chart')?.getContext('2d');
+  if (!ctx) return;
+  if (_gastAcumChart) _gastAcumChart.destroy();
+
+  let acumulado = 0;
+  const dataPoints = months.map(mm => {
+    if (!mm.hasData) return null;
+    acumulado += mm.balance;
+    return acumulado;
+  });
+
+  _gastAcumChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: months.map(mm=>mm.label),
+      datasets: [{
+        label: 'Acumulado',
+        data: dataPoints,
+        backgroundColor: ctx => {
+          const v = ctx.raw;
+          if (v == null) return 'transparent';
+          return v < 0 ? '#f8514999' : '#4ade8099';
+        },
+        borderColor: ctx => {
+          const v = ctx.raw;
+          if (v == null) return 'transparent';
+          return v < 0 ? '#f85149' : '#4ade80';
+        },
+        borderWidth: 1.5,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick: (evt, elements) => {
+        if (elements.length) gastShowBalanceDetail(elements[0].index);
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#191c26', borderColor: '#252936', borderWidth: 1,
+          titleColor: '#e8eaf2', bodyColor: '#e8eaf2',
+          callbacks: {
+            label: ctx => ctx.raw == null ? 'Sin datos todavía' : 'Acumulado: '+(ctx.raw>=0?'+':'')+gastFmt(ctx.raw)
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#5a6080', font: { size: 10 } } },
+        y: {
+          grid: { color: ctx => ctx.tick.value === 0 ? '#5a6080' : '#252936' },
+          ticks: { color: '#5a6080', font: { size: 10 }, callback: v => gastFmtShort(v) }
+        }
+      }
+    }
+  });
 }
 
 function gastBalanceDetailHTML(mm) {
@@ -4875,7 +4926,7 @@ function gastBalanceDetailHTML(mm) {
   return `<div style="font-weight:700;color:var(--text);margin-bottom:4px;text-transform:capitalize">${mm.label} ${_gastBalanceYear}</div><span style="color:var(--ok)">Ingreso: ${gastFmt(mm.inc)}</span> &nbsp;·&nbsp; <span style="color:#ff6b35">Gasto: ${gastFmt(mm.exp)}</span>${mm.sav>0?` &nbsp;·&nbsp; <span style="color:#a78bfa">Ahorro/Inv: ${gastFmt(mm.sav)}</span>`:''} &nbsp;·&nbsp; <span style="color:${balColor};font-weight:700">Balance: ${mm.balance>=0?'+':''}${gastFmt(mm.balance)}</span>`;
 }
 
-// Al tocar una barra: mostrar el detalle de ese mes debajo del gráfico,
+// Al tocar un punto de la línea o una barra: mostrar el detalle de ese mes,
 // y además saltar a verlo en el "Registro mensual" de arriba.
 function gastShowBalanceDetail(m) {
   const mm = _gastBalanceMonthsData.find(x=>x.m===m);
@@ -4930,10 +4981,6 @@ const MICRO_INDICATORS = [
     label:'RIPTE — Salario promedio de trabajadores formales',
     unit:'ARS', color:'#4ade80', dec:0, min:0, max:1e8,
     hint:'Remuneración Imponible Promedio de los Trabajadores Estables. Es el salario bruto promedio de los empleados formales privados registrados. Lo publica el Ministerio de Trabajo cada mes.' },
-  { id:'acara', short:'ACARA',
-    label:'ACARA — Patentamientos de autos 0km',
-    unit:'unidades', color:'#38bdf8', dec:0, min:0, max:200000,
-    hint:'Cantidad de autos 0km patentados durante el mes en todo el país. Es un indicador adelantado del consumo y del crédito. Cuando cae mucho, suele anticipar una recesión.' },
   { id:'afcp', short:'AFCP',
     label:'AFCP — Despachos de cemento',
     unit:'miles de toneladas', color:'#a78bfa', dec:1, min:0, max:2000,
@@ -4959,8 +5006,6 @@ const MICRO_DERIVED = [
     label:'RIPTE real — Salario ajustado por inflación (base fija: Abril 2022 = 100)', unit:'índice', color:'#34d399', dec:2 },
   { id:'poder_adquisitivo', short:'Poder adquisitivo',
     label:'Poder adquisitivo — ¿cuántas CBT cubre el RIPTE?', unit:'veces', color:'#22d3ee', dec:2 },
-  { id:'acara_ia', short:'ACARA interanual',
-    label:'ACARA — Variación interanual', unit:'%', color:'#7dd3fc', dec:2 },
   { id:'afcp_ia', short:'AFCP interanual',
     label:'AFCP — Variación interanual', unit:'%', color:'#c4b5fd', dec:2 },
   { id:'uci_ia', short:'Uso capacidad interanual',
@@ -5004,12 +5049,11 @@ function microWithDerived(){
   if(!sorted.length) return [];
 
   // Mapas por fecha
-  const cbaMap={}, cbtMap={}, ripteMap={}, acaraMap={}, afcpMap={}, uciMap={};
+  const cbaMap={}, cbtMap={}, ripteMap={}, afcpMap={}, uciMap={};
   sorted.forEach(e=>{
     cbaMap[e.fecha]   = microN(e,'cba');
     cbtMap[e.fecha]   = microN(e,'cbt');
     ripteMap[e.fecha] = microN(e,'ripte');
-    acaraMap[e.fecha] = microN(e,'acara');
     afcpMap[e.fecha]  = microN(e,'afcp');
     uciMap[e.fecha]   = microN(e,'uci');
   });
@@ -5113,7 +5157,6 @@ function microWithDerived(){
       ripte_ia:          varInteranual(ripteMap, e.fecha),
       ripte_real,
       poder_adquisitivo,
-      acara_ia:          varInteranual(acaraMap, e.fecha),
       afcp_ia:           varInteranual(afcpMap,  e.fecha),
       uci_ia:            diffPuntos(uciMap, e.fecha),
     };
