@@ -1750,6 +1750,10 @@
               <option value="uci">UCI — Uso de la capacidad instalada industrial (%)</option>
               <option value="uci_ia">UCI — Variación interanual (puntos porcentuales)</option>
             </optgroup>
+            <optgroup label="── Consumo ──">
+              <option value="icp_mensual">ICP — Consumo privado, variación mensual (%)</option>
+              <option value="icp_ia">ICP — Consumo privado, variación interanual (%)</option>
+            </optgroup>
             <optgroup label="── Variaciones mensuales ──">
               <option value="cba_var">CBA — Variación mensual (%)</option>
               <option value="cbt_var">CBT — Variación mensual (%)</option>
@@ -4989,6 +4993,14 @@ const MICRO_INDICATORS = [
     label:'UCI — Uso de la capacidad instalada industrial',
     unit:'%', color:'#fbbf24', dec:1, min:0, max:100,
     hint:'Publicado por el INDEC. Mide qué porcentaje de la capacidad total de las fábricas se está usando realmente. Si está muy bajo (ej. 55%), significa que hay mucha ociosidad industrial. Si está alto (ej. 75-80%), la industria trabaja casi al límite.' },
+  { id:'icp_mensual', short:'ICP mensual',
+    label:'ICP — Índice de Consumo Privado, variación mensual',
+    unit:'%', color:'#fb7185', dec:1, min:-30, max:30,
+    hint:'Cuánto subió o bajó el consumo de la gente (compras, servicios) respecto al mes anterior. Es un termómetro directo del bolsillo real, más específico que el EMAE que mide toda la producción del país.' },
+  { id:'icp_ia', short:'ICP interanual',
+    label:'ICP — Índice de Consumo Privado, variación interanual',
+    unit:'%', color:'#fda4af', dec:1, min:-30, max:30,
+    hint:'Cuánto subió o bajó el consumo de la gente respecto al mismo mes del año pasado. Se carga directo del dato publicado, no se calcula encadenando meses (a diferencia de la inflación).' },
 ];
 
 const MICRO_DERIVED = [
