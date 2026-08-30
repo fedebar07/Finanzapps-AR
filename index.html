@@ -1022,6 +1022,10 @@
               <option value="m2_ia">M2 privado — var. interanual real (%)</option>
               <option value="balanza_comercial">Balanza comercial (USD M)</option>
             </optgroup>
+            <optgroup label="── PBI trimestral ──">
+              <option value="pbi_ia">PBI — var. interanual (%)</option>
+              <option value="pbi_intertrimestral">PBI — var. intertrimestral s.a. (%)</option>
+            </optgroup>
             <optgroup label="── Reservas y riesgo ──">
               <option value="reservas">Reservas brutas BCRA (USD M)</option>
               <option value="riesgo_pais">Riesgo país (bps)</option>
@@ -2105,6 +2109,16 @@ const MACRO_INDICATORS = [
     label:'Actividad económica (EMAE) — ¿cómo le fue a la economía este mes respecto al mes anterior?',
     unit:'% vs. mes anterior (sin estacionalidad)', color:'#0ea5e9', dec:1, min:-10, max:10,
     hint:'Variación mensual desestacionalizada. Filtra el efecto de las temporadas (verano, invierno, etc.) para ver la tendencia real mes a mes.' },
+
+  { id:'pbi_ia', short:'PBI interanual',
+    label:'PBI trimestral — ¿la economía creció o cayó respecto al mismo trimestre del año pasado?',
+    unit:'% vs. mismo trimestre del año anterior', color:'#818cf8', dec:1, min:-30, max:30,
+    hint:'Producto Bruto Interno del INDEC, medición trimestral oficial (más precisa que el EMAE, pero llega con más rezago). Es un dato TRIMESTRAL: cargalo solo en el mes de cierre de cada trimestre (marzo, junio, septiembre, diciembre) y dejá vacío el resto de los meses.' },
+
+  { id:'pbi_intertrimestral', short:'PBI intertrimestral',
+    label:'PBI trimestral — ¿cómo le fue a la economía este trimestre respecto al trimestre anterior?',
+    unit:'% vs. trimestre anterior (sin estacionalidad)', color:'#a5b4fc', dec:1, min:-15, max:15,
+    hint:'Variación desestacionalizada del PBI contra el trimestre inmediatamente anterior. También es un dato TRIMESTRAL: cargalo solo en marzo, junio, septiembre y diciembre.' },
 
   { id:'balanza_comercial', short:'Balanza comercial',
     label:'Balanza comercial — ¿exportamos más de lo que importamos?',
