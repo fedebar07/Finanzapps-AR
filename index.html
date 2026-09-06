@@ -1135,6 +1135,13 @@
           <div style="position:relative;height:160px;margin-top:14px" id="port-foto-chart-wrap">
             <canvas id="port-foto-chart"></canvas>
           </div>
+          <!-- Datos útiles del período: variación total, mejor y peor mes -->
+          <div id="port-foto-stats" class="grid-3" style="margin-top:14px;gap:8px"></div>
+          <!-- Variación mes a mes (barras) -->
+          <div id="port-foto-var-wrap" style="margin-top:14px">
+            <p class="card-label" style="margin-bottom:8px">Variación mes a mes</p>
+            <div style="position:relative;height:120px"><canvas id="port-foto-var-chart"></canvas></div>
+          </div>
         </div>
       </div>
 
@@ -1197,10 +1204,10 @@
         </div>
         <p id="port-infl-status" style="font-size:10px;color:var(--muted);margin-top:6px"></p>
       </div>
-      <!-- Rendimiento acumulado -->
-      <div class="grid-2" style="margin-bottom:14px">
-        <div class="card"><p class="card-label" style="margin-bottom:12px">Ganancia por categoría / mes</p><div style="position:relative;height:160px"><canvas id="port-cats-chart"></canvas></div></div>
-        <div class="card"><p class="card-label" style="margin-bottom:12px">Rendimiento acumulado</p><div id="port-rend-list"></div></div>
+      <!-- Evolución neta por categoría -->
+      <div class="card" style="margin-bottom:14px">
+        <p class="card-label" style="margin-bottom:12px">Evolución neta por categoría</p>
+        <div style="position:relative;height:200px"><canvas id="port-cats-chart"></canvas></div>
       </div>
     </div>
 
@@ -2940,6 +2947,7 @@ function portRenderInflacion(){
 
 /* ── Foto manual del patrimonio (inicio/cierre de mes) ── */
 let _portFotoChart = null;
+let _portFotoVarChart = null;
 
 function portFotoKey(m,y){ return `${y}-${String(m).padStart(2,'0')}`; }
 
@@ -2998,10 +3006,15 @@ function portRenderFoto(){
     .filter(p=>p.valor!=null);
 
   const wrap = document.getElementById('port-foto-chart-wrap');
+  const statsEl = document.getElementById('port-foto-stats');
+  const varWrap = document.getElementById('port-foto-var-wrap');
   if(puntos.length < 2){
     if(wrap) wrap.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:20px 0">Cargá al menos 2 meses para ver la evolución.</p>';
+    if(statsEl) statsEl.innerHTML = '';
+    if(varWrap) varWrap.style.display = 'none';
     return;
   }
+  if(varWrap) varWrap.style.display = 'block';
   // Restaurar canvas si antes se reemplazó por el mensaje de "cargá 2 meses"
   if(!document.getElementById('port-foto-chart')){
     wrap.innerHTML = '<canvas id="port-foto-chart"></canvas>';
@@ -3032,6 +3045,75 @@ function portRenderFoto(){
       }
     }
   });
+
+  // ── Variación mes a mes (entre cada punto de la foto y el anterior) ──
+  const variaciones = [];
+  for (let i=1; i<puntos.length; i++){
+    const prev = puntos[i-1].valor, cur = puntos[i].valor;
+    const pct = prev>0 ? ((cur-prev)/prev)*100 : null;
+    variaciones.push({ label: labels[i], pct, monto: cur-prev });
+  }
+
+  // ── Datos útiles del período: variación total, mejor mes, peor mes ──
+  const primero = puntos[0].valor, ultimo = puntos[puntos.length-1].valor;
+  const variacionTotalPct = primero>0 ? ((ultimo-primero)/primero)*100 : null;
+  let mejorMes = null, peorMes = null;
+  variaciones.forEach(v=>{
+    if (v.pct==null) return;
+    if (!mejorMes || v.pct > mejorMes.pct) mejorMes = v;
+    if (!peorMes  || v.pct < peorMes.pct)  peorMes  = v;
+  });
+
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="card" style="padding:12px;border-top:2px solid ${variacionTotalPct>=0?'var(--port)':'var(--danger)'}">
+        <p class="card-label" style="margin-bottom:4px">Variación del período</p>
+        <p style="font-family:var(--mono);font-size:15px;font-weight:700;color:${variacionTotalPct>=0?'var(--port)':'var(--danger)'}">${variacionTotalPct!=null?(variacionTotalPct>=0?'+':'')+variacionTotalPct.toFixed(1)+'%':'—'}</p>
+      </div>
+      <div class="card" style="padding:12px;border-top:2px solid var(--port)">
+        <p class="card-label" style="margin-bottom:4px">Mejor mes</p>
+        <p style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--port)">${mejorMes?'+'+mejorMes.pct.toFixed(1)+'%':'—'}</p>
+        <p style="font-size:10px;color:var(--muted);margin-top:2px">${mejorMes?mejorMes.label:''}</p>
+      </div>
+      <div class="card" style="padding:12px;border-top:2px solid var(--danger)">
+        <p class="card-label" style="margin-bottom:4px">Peor mes</p>
+        <p style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--danger)">${peorMes?(peorMes.pct>=0?'+':'')+peorMes.pct.toFixed(1)+'%':'—'}</p>
+        <p style="font-size:10px;color:var(--muted);margin-top:2px">${peorMes?peorMes.label:''}</p>
+      </div>
+    `;
+  }
+
+  const ctxVar = document.getElementById('port-foto-var-chart')?.getContext('2d');
+  if (ctxVar) {
+    if (_portFotoVarChart) _portFotoVarChart.destroy();
+    _portFotoVarChart = new Chart(ctxVar, {
+      type:'bar',
+      data:{
+        labels: variaciones.map(v=>v.label),
+        datasets:[{
+          label:'Variación mensual',
+          data: variaciones.map(v=>v.pct),
+          backgroundColor: variaciones.map(v=> v.pct==null ? 'transparent' : (v.pct>=0?'#4ade8099':'#f8514999')),
+          borderColor: variaciones.map(v=> v.pct==null ? 'transparent' : (v.pct>=0?'#4ade80':'#f85149')),
+          borderWidth:1.5, borderRadius:4,
+        }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{
+          backgroundColor:'#191c26', borderColor:'#252936', borderWidth:1, titleColor:'#e8eaf2', bodyColor:'#e8eaf2',
+          callbacks:{ label:ctx=>{
+            const v = variaciones[ctx.dataIndex];
+            return v.pct==null ? 'Sin dato previo' : `${v.pct>=0?'+':''}${v.pct.toFixed(2)}% (${v.monto>=0?'+':''}${portFmtARS(v.monto)})`;
+          }}
+        }},
+        scales:{
+          x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:9}}},
+          y:{grid:{color:ctx=>ctx.tick.value===0?'#5a6080':'#252936'},ticks:{color:'#5a6080',font:{size:10},callback:v=>v.toFixed(0)+'%'}}
+        }
+      }
+    });
+  }
 }
 function portPopulateSelects(){
   const months=PORT_MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
@@ -3094,18 +3176,16 @@ function portRenderCharts(){
   const tl=portBuildTimeline();
   const active=PORT_CAT_DEFS.filter(d=>portGetCatState(d.id)?.active);
   const evolData=tl.map(({month,year,label})=>{
-    let capARS=0,gainARS=0;
+    let capARS=0;
     active.forEach(d=>{
       const cs=portGetCatState(d.id);
       capARS  += d.id==='pf' ? portPFBalance(cs,month,year) : portToARSAtWithType(portCatCapitalAt(d.id,month,year),cs.currency,cs.usdType,month,year);
-      gainARS += portCatMonthlyGainARS(d.id,month,year);
     });
     (PS().cajas||[]).forEach(c=>{
-      const {balance,interest}=portGetCajaBalance(c,month,year);
+      const {balance}=portGetCajaBalance(c,month,year);
       capARS  += portToARSAtWithType(balance,c.currency,c.usdType,month,year);
-      gainARS += portToARSAtWithType(interest,c.currency,c.usdType,month,year);
     });
-    return {label,cap:portToDisplay(capARS),gain:portToDisplay(gainARS),capReal:capARS*portDeflatorToToday(month,year)};
+    return {label,cap:portToDisplay(capARS),capReal:capARS*portDeflatorToToday(month,year)};
   });
   const opts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{color:'#8b949e',font:{size:10},boxWidth:10,padding:12}},tooltip:{backgroundColor:'#191c26',borderColor:'#252936',borderWidth:1,titleColor:'#e8eaf2',bodyColor:'#e8eaf2'}},scales:{x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:10}}},y:{grid:{color:'#252936'},ticks:{color:'#5a6080',font:{size:10},callback:v=>PS().cur==='ARS'?`$${(v/1000).toFixed(0)}k`:`U$D${v.toFixed(0)}`}}}};
   const ctxE=document.getElementById('port-evol-chart')?.getContext('2d');
@@ -3113,37 +3193,35 @@ function portRenderCharts(){
     if(_portEvolChart) _portEvolChart.destroy();
     const ds=[
       {label:'Capital',data:evolData.map(d=>d.cap),borderColor:'#4ade80',backgroundColor:'#4ade8022',fill:true,tension:.4,pointRadius:3,pointBackgroundColor:'#4ade80',borderWidth:2},
-      {label:'Ganancia',data:evolData.map(d=>d.gain),borderColor:'#60a5fa',backgroundColor:'#60a5fa22',fill:true,tension:.4,pointRadius:3,pointBackgroundColor:'#60a5fa',borderWidth:2},
     ];
     if(_portShowReal&&PS().cur==='ARS') ds.push({label:'Capital (ajustado IPC)',data:evolData.map(d=>d.capReal),borderColor:'#f59e0b',borderDash:[5,4],fill:false,tension:.4,pointRadius:2,pointBackgroundColor:'#f59e0b',borderWidth:2});
     _portEvolChart=new Chart(ctxE,{type:'line',data:{labels:evolData.map(d=>d.label),datasets:ds},options:{...opts}});
   }
-  // Barras por categoría
+  // Evolución neta por categoría: una línea por cada categoría activa, mostrando
+  // cómo creció o se achicó su capital mes a mes (no la ganancia aislada, sino
+  // el valor total de la posición en cada momento).
   const ctxC=document.getElementById('port-cats-chart')?.getContext('2d');
   if(ctxC){
     if(_portCatsChart) _portCatsChart.destroy();
-    _portCatsChart=new Chart(ctxC,{type:'bar',data:{labels:tl.map(t=>t.label),datasets:active.map(d=>({label:d.name,data:tl.map(({month,year})=>portToDisplay(portCatMonthlyGainARS(d.id,month,year))||0),backgroundColor:d.color+'99',borderColor:d.color,borderWidth:1,borderRadius:3,stack:'a'}))},options:{...opts,plugins:{...opts.plugins,legend:{display:true,labels:{color:'#8b949e',font:{size:10},boxWidth:8,padding:8}}}}});
+    const catDatasets = active.map(d=>{
+      const cs=portGetCatState(d.id);
+      const serie = tl.map(({month,year})=>{
+        const capARS = d.id==='pf'
+          ? portPFBalance(cs,month,year)
+          : portToARSAtWithType(portCatCapitalAt(d.id,month,year),cs.currency,cs.usdType,month,year);
+        return portToDisplay(capARS);
+      });
+      return {
+        label:d.name, data:serie,
+        borderColor:d.color, backgroundColor:d.color+'22',
+        borderWidth:2, tension:.35, pointRadius:2, pointHoverRadius:5,
+        pointBackgroundColor:d.color, fill:false,
+      };
+    });
+    _portCatsChart=new Chart(ctxC,{type:'line',data:{labels:tl.map(t=>t.label),datasets:catDatasets},options:{...opts,plugins:{...opts.plugins,legend:{display:true,labels:{color:'#8b949e',font:{size:10},boxWidth:8,padding:8}}}}});
   }
   // Distribución
   portRenderDist();
-  // Rendimiento acumulado
-  const rendEl=document.getElementById('port-rend-list');
-  if(rendEl) rendEl.innerHTML=active.map(d=>{
-    const cs=portGetCatState(d.id);
-    const capARS=d.id==='pf'?portPFBalance(cs,PORT_NOW_M,PORT_NOW_Y):portToARSWithType(cs.capital,cs.currency,cs.usdType);
-    const gainARS=tl.reduce((s,{month,year})=>s+portCatMonthlyGainARS(d.id,month,year),0);
-    const p=capARS>0?(gainARS/capARS)*100:0;
-    return `<div style="margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span style="font-size:11px;font-weight:700;color:${d.color}">${d.icon} ${d.name}</span>
-        <div style="text-align:right">
-          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${gainARS>=0?'var(--port)':'var(--danger)'}">${portFmt(portToDisplay(gainARS))}</span>
-          <span style="font-size:10px;color:var(--muted);margin-left:5px">${portPct(p)}</span>
-        </div>
-      </div>
-      <div class="progress-track"><div class="progress-fill" style="width:${Math.min(100,Math.abs(p)*3)}%;background:${gainARS>=0?d.color:'var(--danger)'}"></div></div>
-    </div>`;
-  }).join('')||'<p style="font-size:12px;color:var(--muted)">Sin categorías activas.</p>';
 }
 
 function portRenderDist(){
