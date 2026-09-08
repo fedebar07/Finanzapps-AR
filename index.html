@@ -1132,15 +1132,24 @@
           </div>
           <button class="btn btn-ok btn-sm btn-full" onclick="portSaveFoto()">Guardar foto del mes</button>
           <div id="port-foto-resumen" style="margin-top:12px"></div>
-          <div style="position:relative;height:160px;margin-top:14px" id="port-foto-chart-wrap">
+
+          <!-- Navegación de año para los gráficos -->
+          <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:16px;margin-bottom:6px">
+            <button class="btn btn-outline btn-sm" onclick="portChangeFotoYear(-1)">‹</button>
+            <span id="port-foto-chart-year-label" style="font-family:var(--mono);font-size:13px;min-width:50px;text-align:center"></span>
+            <button class="btn btn-outline btn-sm" onclick="portChangeFotoYear(1)">›</button>
+          </div>
+
+          <p class="card-label" style="margin-bottom:8px">Evolución del año</p>
+          <div style="position:relative;height:180px" id="port-foto-chart-wrap">
             <canvas id="port-foto-chart"></canvas>
           </div>
           <!-- Datos útiles del período: variación total, mejor y peor mes -->
           <div id="port-foto-stats" class="grid-3" style="margin-top:14px;gap:8px"></div>
-          <!-- Variación mes a mes (barras) -->
+          <!-- Variación mes a mes (barras), del mismo año -->
           <div id="port-foto-var-wrap" style="margin-top:14px">
             <p class="card-label" style="margin-bottom:8px">Variación mes a mes</p>
-            <div style="position:relative;height:120px"><canvas id="port-foto-var-chart"></canvas></div>
+            <div style="position:relative;height:150px"><canvas id="port-foto-var-chart"></canvas></div>
           </div>
         </div>
       </div>
@@ -2737,6 +2746,9 @@ function portDaysSincePFStart(cs,m,y){
   return Math.max(0,Math.round((target-start)/86400000));
 }
 function portPFBalance(cs,m,y){
+  // Si el mes consultado es anterior a la fecha de activación del PF, todavía
+  // no existía: no tiene sentido devolver el capital principal ahí.
+  if (y<cs.startYear || (y===cs.startYear && m<cs.startMonth)) return 0;
   const principal=portToARSAtWithType(cs.capital,cs.currency,cs.usdType,cs.startMonth,cs.startYear);
   const aports=(PS().aports||[])
     .filter(a=>a.catId==='pf')
@@ -2757,9 +2769,15 @@ function portPFBalance(cs,m,y){
 }
 function portPFAportSum(cs,m,y){
   const cut=portDaysSincePFStart(cs,m,y);
-  return (PS().aports||[])
+  // El capital ORIGINAL del PF (cargado al activar la categoría) cuenta como un
+  // aporte implícito en el día 0 — así el cálculo de ganancia lo excluye
+  // correctamente en el mes de activación, sin depender de que
+  // portPFBalance(mes-anterior) devuelva por error el capital completo.
+  const capitalInicial = (y<cs.startYear || (y===cs.startYear && m<cs.startMonth)) ? 0 : cs.capital;
+  const aportesRegistrados = (PS().aports||[])
     .filter(a=>a.catId==='pf'&&portDaysSincePFStart(cs,a.month,a.year)<=cut)
     .reduce((s,a)=>s+portAportSign(a)*portAportToARS(a,cs),0);
+  return capitalInicial + aportesRegistrados;
 }
 function portPFNextMaturity(cs){
   const td=portDaysSincePFStart(cs,PORT_NOW_M,PORT_NOW_Y);
@@ -2771,6 +2789,12 @@ function portPFNextMaturity(cs){
 function portCatCapitalAt(id,m,y){
   const cs=portGetCatState(id);
   if(!cs) return 0;
+  // Si el mes consultado es ANTERIOR a la fecha en que se activó esta categoría,
+  // todavía no existía: el capital en ese momento es $0, no el capital original.
+  // (Bug corregido: antes devolvía el capital inicial incluso en meses previos
+  // a la activación, inflando el capital total y las líneas de evolución por
+  // categoría en los meses donde esa categoría aún no había sido cargada.)
+  if (y<cs.startYear || (y===cs.startYear && m<cs.startMonth)) return 0;
   const totR=(PS().results||[]).filter(r=>r.catId===id).reduce((s,r)=>s+r.gain,0);
   const totA=(PS().aports||[]).filter(a=>a.catId===id).reduce((s,a)=>s+portAportSign(a)*portAportToCatCur(a,cs),0);
   const orig=cs.capital-totR-totA;
@@ -2948,6 +2972,8 @@ function portRenderInflacion(){
 /* ── Foto manual del patrimonio (inicio/cierre de mes) ── */
 let _portFotoChart = null;
 let _portFotoVarChart = null;
+let _portFotoChartYear = PORT_NOW_Y;
+let _portFotoMonthsData = [];
 
 function portFotoKey(m,y){ return `${y}-${String(m).padStart(2,'0')}`; }
 
@@ -2969,14 +2995,21 @@ function portSaveFoto(){
   };
   portSave();
   showToast('✓ Foto del mes guardada','ok');
+  // Si guardaste un mes de un año distinto al que están mostrando los gráficos,
+  // saltamos a ese año para que veas el dato recién cargado.
+  if (year !== _portFotoChartYear) _portFotoChartYear = year;
+  portRenderFoto();
+}
+
+function portChangeFotoYear(dir){
+  _portFotoChartYear += dir;
   portRenderFoto();
 }
 
 function portRenderFoto(){
   const fotos = PS().fotos || {};
-  const keys = Object.keys(fotos).sort();
 
-  // Resumen del mes seleccionado en el formulario (variación inicio->cierre)
+  // Resumen del mes seleccionado en el formulario de carga (variación inicio->cierre)
   const el = document.getElementById('port-foto-resumen');
   const selMonth = document.getElementById('port-foto-month');
   const selYear  = document.getElementById('port-foto-year');
@@ -2998,46 +3031,60 @@ function portRenderFoto(){
     document.getElementById('port-foto-cierre').value = f?.cierre ?? '';
   }
 
-  // Gráfico de evolución: usa el cierre de cada mes (o el inicio si falta cierre)
+  const yearLabel = document.getElementById('port-foto-chart-year-label');
+  if (yearLabel) yearLabel.textContent = _portFotoChartYear;
+
+  // Los 12 meses del año que se está mostrando, con su valor (cierre, o inicio
+  // si falta el cierre) o null si no hay ningún dato cargado ese mes.
+  const months = [];
+  for (let m=1; m<=12; m++){
+    const f = fotos[portFotoKey(m, _portFotoChartYear)];
+    const valor = f ? (f.cierre ?? f.inicio ?? null) : null;
+    months.push({ m, label: PORT_MONTHS[m-1], valor });
+  }
+  _portFotoMonthsData = months;
+
+  portRenderFotoLineChart(months);
+  portRenderFotoVarChart(months);
+}
+
+// Gráfico 1: evolución del año completo (línea, 12 meses fijos, saltando los
+// meses sin dato en vez de mostrarlos en $0 — así no se confunde con "patrimonio cero").
+function portRenderFotoLineChart(months){
   const ctx = document.getElementById('port-foto-chart')?.getContext('2d');
   if(!ctx) return;
-  const puntos = keys
-    .map(k=>({ key:k, valor: fotos[k].cierre ?? fotos[k].inicio }))
-    .filter(p=>p.valor!=null);
+  if(_portFotoChart) _portFotoChart.destroy();
 
-  const wrap = document.getElementById('port-foto-chart-wrap');
+  const conDatos = months.filter(mm=>mm.valor!=null);
   const statsEl = document.getElementById('port-foto-stats');
   const varWrap = document.getElementById('port-foto-var-wrap');
-  if(puntos.length < 2){
-    if(wrap) wrap.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:20px 0">Cargá al menos 2 meses para ver la evolución.</p>';
-    if(statsEl) statsEl.innerHTML = '';
+
+  if(conDatos.length < 2){
+    if(statsEl) statsEl.innerHTML = '<p style="font-size:12px;color:var(--muted);grid-column:1/-1;text-align:center;padding:10px 0">Cargá al menos 2 meses de este año para ver la evolución y las estadísticas.</p>';
     if(varWrap) varWrap.style.display = 'none';
-    return;
+  } else {
+    if(varWrap) varWrap.style.display = 'block';
   }
-  if(varWrap) varWrap.style.display = 'block';
-  // Restaurar canvas si antes se reemplazó por el mensaje de "cargá 2 meses"
-  if(!document.getElementById('port-foto-chart')){
-    wrap.innerHTML = '<canvas id="port-foto-chart"></canvas>';
-  }
-  const ctx2 = document.getElementById('port-foto-chart').getContext('2d');
-  const labels = puntos.map(p=>{
-    const [y,m] = p.key.split('-');
-    return `${PORT_MONTHS[Number(m)-1]} ${y.slice(2)}`;
-  });
-  if(_portFotoChart) _portFotoChart.destroy();
-  _portFotoChart = new Chart(ctx2,{
+
+  _portFotoChart = new Chart(ctx,{
     type:'line',
-    data:{ labels, datasets:[{
-      label:'Patrimonio (foto manual)',
-      data: puntos.map(p=>p.valor),
-      borderColor:'#4ade80', backgroundColor:'#4ade8022',
-      fill:true, tension:.35, pointRadius:3, pointBackgroundColor:'#4ade80', borderWidth:2,
-    }]},
+    data:{
+      labels: months.map(mm=>mm.label),
+      datasets:[{
+        label:'Patrimonio (foto manual)',
+        data: months.map(mm=>mm.valor),
+        spanGaps: true, // conecta la línea salteando los meses sin dato, sin pasar por $0
+        borderColor:'#4ade80', backgroundColor:'#4ade8022',
+        fill:true, tension:.35,
+        pointRadius: ctx => ctx.raw==null ? 0 : 3,
+        pointBackgroundColor:'#4ade80', borderWidth:2,
+      }]
+    },
     options:{
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{display:false}, tooltip:{
         backgroundColor:'#191c26', borderColor:'#252936', borderWidth:1, titleColor:'#e8eaf2', bodyColor:'#4ade80',
-        callbacks:{ label:ctx=>portFmtARS(ctx.raw) }
+        callbacks:{ label:ctx=> ctx.raw==null ? 'Sin dato' : portFmtARS(ctx.raw) }
       }},
       scales:{
         x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:10}}},
@@ -3046,17 +3093,20 @@ function portRenderFoto(){
     }
   });
 
-  // ── Variación mes a mes (entre cada punto de la foto y el anterior) ──
-  const variaciones = [];
-  for (let i=1; i<puntos.length; i++){
-    const prev = puntos[i-1].valor, cur = puntos[i].valor;
-    const pct = prev>0 ? ((cur-prev)/prev)*100 : null;
-    variaciones.push({ label: labels[i], pct, monto: cur-prev });
-  }
+  if (conDatos.length < 2) return;
 
-  // ── Datos útiles del período: variación total, mejor mes, peor mes ──
-  const primero = puntos[0].valor, ultimo = puntos[puntos.length-1].valor;
+  // ── Datos útiles del período: variación total (primer→último dato del año), mejor y peor mes ──
+  const primero = conDatos[0].valor, ultimo = conDatos[conDatos.length-1].valor;
   const variacionTotalPct = primero>0 ? ((ultimo-primero)/primero)*100 : null;
+
+  // Variaciones mes a mes, solo entre meses consecutivos que ambos tengan dato
+  const variaciones = [];
+  for (let i=1; i<months.length; i++){
+    const prev = months[i-1].valor, cur = months[i].valor;
+    if (prev==null || cur==null) { variaciones.push({label:months[i].label, pct:null, monto:null}); continue; }
+    const pct = prev>0 ? ((cur-prev)/prev)*100 : null;
+    variaciones.push({ label: months[i].label, pct, monto: cur-prev });
+  }
   let mejorMes = null, peorMes = null;
   variaciones.forEach(v=>{
     if (v.pct==null) return;
@@ -3067,7 +3117,7 @@ function portRenderFoto(){
   if (statsEl) {
     statsEl.innerHTML = `
       <div class="card" style="padding:12px;border-top:2px solid ${variacionTotalPct>=0?'var(--port)':'var(--danger)'}">
-        <p class="card-label" style="margin-bottom:4px">Variación del período</p>
+        <p class="card-label" style="margin-bottom:4px">Variación del año</p>
         <p style="font-family:var(--mono);font-size:15px;font-weight:700;color:${variacionTotalPct>=0?'var(--port)':'var(--danger)'}">${variacionTotalPct!=null?(variacionTotalPct>=0?'+':'')+variacionTotalPct.toFixed(1)+'%':'—'}</p>
       </div>
       <div class="card" style="padding:12px;border-top:2px solid var(--port)">
@@ -3082,38 +3132,50 @@ function portRenderFoto(){
       </div>
     `;
   }
+}
 
+// Gráfico 2: variación mes a mes del mismo año, en barras (12 meses, ene sin
+// dato previo dentro del año así que arranca desde feb).
+function portRenderFotoVarChart(months){
   const ctxVar = document.getElementById('port-foto-var-chart')?.getContext('2d');
-  if (ctxVar) {
-    if (_portFotoVarChart) _portFotoVarChart.destroy();
-    _portFotoVarChart = new Chart(ctxVar, {
-      type:'bar',
-      data:{
-        labels: variaciones.map(v=>v.label),
-        datasets:[{
-          label:'Variación mensual',
-          data: variaciones.map(v=>v.pct),
-          backgroundColor: variaciones.map(v=> v.pct==null ? 'transparent' : (v.pct>=0?'#4ade8099':'#f8514999')),
-          borderColor: variaciones.map(v=> v.pct==null ? 'transparent' : (v.pct>=0?'#4ade80':'#f85149')),
-          borderWidth:1.5, borderRadius:4,
-        }]
-      },
-      options:{
-        responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{display:false}, tooltip:{
-          backgroundColor:'#191c26', borderColor:'#252936', borderWidth:1, titleColor:'#e8eaf2', bodyColor:'#e8eaf2',
-          callbacks:{ label:ctx=>{
-            const v = variaciones[ctx.dataIndex];
-            return v.pct==null ? 'Sin dato previo' : `${v.pct>=0?'+':''}${v.pct.toFixed(2)}% (${v.monto>=0?'+':''}${portFmtARS(v.monto)})`;
-          }}
-        }},
-        scales:{
-          x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:9}}},
-          y:{grid:{color:ctx=>ctx.tick.value===0?'#5a6080':'#252936'},ticks:{color:'#5a6080',font:{size:10},callback:v=>v.toFixed(0)+'%'}}
-        }
-      }
-    });
+  if (!ctxVar) return;
+  if (_portFotoVarChart) _portFotoVarChart.destroy();
+
+  const variaciones = [{label:months[0].label, pct:null, monto:null}]; // enero no tiene mes anterior dentro del año
+  for (let i=1; i<months.length; i++){
+    const prev = months[i-1].valor, cur = months[i].valor;
+    if (prev==null || cur==null) { variaciones.push({label:months[i].label, pct:null, monto:null}); continue; }
+    const pct = prev>0 ? ((cur-prev)/prev)*100 : null;
+    variaciones.push({ label: months[i].label, pct, monto: cur-prev });
   }
+
+  _portFotoVarChart = new Chart(ctxVar, {
+    type:'bar',
+    data:{
+      labels: variaciones.map(v=>v.label),
+      datasets:[{
+        label:'Variación mensual',
+        data: variaciones.map(v=>v.pct),
+        backgroundColor: variaciones.map(v=> v.pct==null ? 'transparent' : (v.pct>=0?'#4ade8099':'#f8514999')),
+        borderColor: variaciones.map(v=> v.pct==null ? 'transparent' : (v.pct>=0?'#4ade80':'#f85149')),
+        borderWidth:1.5, borderRadius:4,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{
+        backgroundColor:'#191c26', borderColor:'#252936', borderWidth:1, titleColor:'#e8eaf2', bodyColor:'#e8eaf2',
+        callbacks:{ label:ctx=>{
+          const v = variaciones[ctx.dataIndex];
+          return v.pct==null ? 'Sin datos suficientes' : `${v.pct>=0?'+':''}${v.pct.toFixed(2)}% (${v.monto>=0?'+':''}${portFmtARS(v.monto)})`;
+        }}
+      }},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:9}}},
+        y:{grid:{color:ctx=>ctx.tick.value===0?'#5a6080':'#252936'},ticks:{color:'#5a6080',font:{size:10},callback:v=>v.toFixed(0)+'%'}}
+      }
+    }
+  });
 }
 function portPopulateSelects(){
   const months=PORT_MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
