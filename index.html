@@ -1145,7 +1145,7 @@
             <canvas id="port-foto-chart"></canvas>
           </div>
           <!-- Datos útiles del período: variación total, mejor y peor mes -->
-          <div id="port-foto-stats" class="grid-3" style="margin-top:14px;gap:8px"></div>
+          <div id="port-foto-stats" class="grid-4" style="margin-top:14px;gap:8px"></div>
           <!-- Variación mes a mes (barras), del mismo año -->
           <div id="port-foto-var-wrap" style="margin-top:14px">
             <p class="card-label" style="margin-bottom:8px">Variación mes a mes</p>
@@ -2816,6 +2816,14 @@ function portCatMonthlyGainARS(id,m,y){
   return r ? portToARSAtWithType(r.gain,r.currency||cs.currency,cs.usdType,m,y) : 0;
 }
 function portGetCajaBalance(caja,m,y){
+  // Si la caja tiene fecha de creación registrada y el mes consultado es
+  // anterior a esa fecha, todavía no existía: no debería aportar capital ahí.
+  // (Cajas creadas antes de este fix no tienen startMonth/startYear guardado;
+  // en ese caso se asume que existieron siempre, para no alterar datos ya
+  // guardados de golpe.)
+  if (caja.startYear!=null && caja.startMonth!=null) {
+    if (y<caja.startYear || (y===caja.startYear && m<caja.startMonth)) return {balance:0, interest:0};
+  }
   const movs=(PS().cajaMovs||[])
     .filter(mv=>mv.cajaId===caja.id&&(mv.year<y||(mv.year===y&&mv.month<=m)))
     .reduce((s,mv)=>s+(mv.type==='deposito'?mv.amount:-mv.amount),0);
@@ -3114,8 +3122,20 @@ function portRenderFotoLineChart(months){
     if (!peorMes  || v.pct < peorMes.pct)  peorMes  = v;
   });
 
+  // Variación del último mes cargado (el más reciente con dato, contra el mes
+  // inmediatamente anterior que también tenga dato — no necesariamente diciembre).
+  let ultimoMes = null;
+  for (let i=variaciones.length-1; i>=0; i--){
+    if (variaciones[i].pct!=null) { ultimoMes = variaciones[i]; break; }
+  }
+
   if (statsEl) {
     statsEl.innerHTML = `
+      <div class="card" style="padding:12px;border-top:2px solid ${ultimoMes&&ultimoMes.pct>=0?'var(--port)':'var(--danger)'}">
+        <p class="card-label" style="margin-bottom:4px">Último mes</p>
+        <p style="font-family:var(--mono);font-size:14px;font-weight:700;color:${ultimoMes?(ultimoMes.pct>=0?'var(--port)':'var(--danger)'):'var(--muted)'}">${ultimoMes?(ultimoMes.pct>=0?'+':'')+ultimoMes.pct.toFixed(1)+'%':'—'}</p>
+        <p style="font-size:10px;color:var(--muted);margin-top:2px">${ultimoMes?ultimoMes.label:''}</p>
+      </div>
       <div class="card" style="padding:12px;border-top:2px solid ${variacionTotalPct>=0?'var(--port)':'var(--danger)'}">
         <p class="card-label" style="margin-bottom:4px">Variación del año</p>
         <p style="font-family:var(--mono);font-size:15px;font-weight:700;color:${variacionTotalPct>=0?'var(--port)':'var(--danger)'}">${variacionTotalPct!=null?(variacionTotalPct>=0?'+':'')+variacionTotalPct.toFixed(1)+'%':'—'}</p>
@@ -3615,7 +3635,7 @@ function portAddCaja(){
   if(!name||!balance){showToast('Completá nombre y saldo','err');return;}
   if(!PS().cajas) PS().cajas=[];
   const id=PS().cajas.length?Math.max(...PS().cajas.map(c=>c.id))+1:1;
-  const c={id,name,currency,balance,remunerada:_portRemOn,tna};
+  const c={id,name,currency,balance,remunerada:_portRemOn,tna,startMonth:PORT_NOW_M,startYear:PORT_NOW_Y};
   if(currency==='USD') c.usdType=usdType;
   PS().cajas.push(c);
   portSave(); closeModal('port-modal-caja'); portRenderCajas();
