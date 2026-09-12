@@ -729,6 +729,24 @@
     ═══════════════════════════════════════════ */
     .hodl-panel { display:none; }
     .hodl-panel.active { display:block; }
+    /* ═══════════════════════════════════════════
+       GASTOS — sub-tabs y deudas
+    ═══════════════════════════════════════════ */
+    .gastos-panel { display:none; }
+    .gastos-panel.active { display:block; }
+    .deuda-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 16px; margin-bottom: 12px;
+    }
+    .deuda-progress-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .deuda-progress-fill { height: 100%; border-radius: 3px; transition: width .3s ease; }
+    .deuda-cuota-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 12px; border-radius: 8px; background: var(--surface);
+      border: 1px solid var(--border); cursor: pointer; transition: all .15s;
+    }
+    .deuda-cuota-row:hover { border-color: var(--border2); }
+    .deuda-cuota-row.pagada { opacity: .65; }
     .hodl-prices-bar {
       display:flex;align-items:center;gap:10px;flex-wrap:wrap;
       background:var(--surface);border-bottom:1px solid var(--border);
@@ -1474,6 +1492,13 @@
 
 <!-- GASTOS -->
 <section id="section-gastos" class="section">
+
+  <div class="macro-subnav">
+    <button class="gastos-tab macro-tab active" data-tab="ggastos" onclick="gastosTab('ggastos',this)">Gastos</button>
+    <button class="gastos-tab macro-tab"        data-tab="gdeudas" onclick="gastosTab('gdeudas',this)">Deudas</button>
+  </div>
+
+  <div id="gastos-ggastos" class="gastos-panel active">
   <div class="content">
 
     <!-- Resumen -->
@@ -1680,6 +1705,61 @@
     </div>
 
   </div>
+  </div><!-- /gastos-ggastos -->
+
+  <!-- ══════════════════════════════════════════
+       PANEL: DEUDAS
+  ══════════════════════════════════════════ -->
+  <div id="gastos-gdeudas" class="gastos-panel">
+  <div class="content">
+
+    <!-- Resumen de deudas -->
+    <div class="grid-3" id="deuda-summary" style="margin-bottom:14px"></div>
+
+    <!-- Formulario nueva deuda -->
+    <div class="card" style="margin-bottom:14px">
+      <p style="font-size:15px;font-weight:700;margin-bottom:14px">Nueva deuda</p>
+      <div class="form-group">
+        <label>Nombre</label>
+        <input type="text" id="deuda-nombre" class="input" placeholder="Ej: Tarjeta Visa, Préstamo personal">
+      </div>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="form-group" style="margin:0">
+          <label>Tipo</label>
+          <select id="deuda-tipo" class="input">
+            <option value="tarjeta">💳 Tarjeta</option>
+            <option value="prestamo">🏦 Préstamo</option>
+            <option value="otro">📄 Otro</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Monto total</label>
+          <input type="number" id="deuda-monto" class="input" placeholder="Ej: 500000">
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="form-group" style="margin:0">
+          <label>Cantidad de cuotas</label>
+          <input type="number" id="deuda-cuotas" class="input" placeholder="Ej: 12" min="1">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>TNA (%) <span style="color:var(--muted);font-weight:400">opcional</span></label>
+          <input type="number" id="deuda-tna" class="input" placeholder="Ej: 65 (dejar vacío si no hay interés)">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Fecha de la primera cuota</label>
+        <input type="month" id="deuda-fecha" class="input">
+      </div>
+      <p class="form-note" id="deuda-preview" style="margin-bottom:10px"></p>
+      <button class="btn btn-full" style="background:var(--gastos);color:#0d0f14;font-weight:700" onclick="deudaAdd()">+ Agregar deuda</button>
+    </div>
+
+    <!-- Lista de deudas activas -->
+    <div id="deuda-list"></div>
+
+  </div>
+  </div><!-- /gastos-gdeudas -->
 
   <!-- Modal editar gasto -->
   <div class="modal-overlay" id="gast-modal-edit" onclick="handleOverlayClick(event,'gast-modal-edit')">
@@ -1697,6 +1777,27 @@
       <div style="display:flex;gap:10px">
         <button class="btn btn-ghost btn-full" onclick="closeModal('gast-modal-edit')">Cancelar</button>
         <button class="btn btn-full" style="background:var(--gastos);color:#0d0f14;font-weight:700" onclick="gastSaveEdit()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal detalle de cuotas de una deuda -->
+  <div class="modal-overlay" id="deuda-modal-cuotas" onclick="handleOverlayClick(event,'deuda-modal-cuotas')">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-header"><span class="modal-title" id="deuda-cuotas-title">Cuotas</span><button class="modal-close" onclick="closeModal('deuda-modal-cuotas')">✕</button></div>
+      <div id="deuda-cuotas-list" style="max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+  </div>
+
+  <!-- Modal confirmar eliminar deuda -->
+  <div class="modal-overlay" id="deuda-modal-del" onclick="handleOverlayClick(event,'deuda-modal-del')">
+    <div class="modal-box" style="max-width:320px;text-align:center">
+      <div style="font-size:28px;margin-bottom:10px">🗑️</div>
+      <p style="font-size:15px;font-weight:700;margin-bottom:6px">¿Eliminar esta deuda?</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Esta acción no se puede deshacer.</p>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-danger btn-full" onclick="deudaConfirmDelete()">Eliminar</button>
+        <button class="btn btn-ghost btn-full" onclick="closeModal('deuda-modal-del')">Cancelar</button>
       </div>
     </div>
   </div>
@@ -1924,6 +2025,7 @@ function buildDefaultState() {
     gastos: {
       expenses: [],
       inflation: {},
+      deudas: [],
     },
     micro: { entries: [] },
   };
@@ -5118,6 +5220,253 @@ function gastShowBalanceDetail(m) {
 }
 
 /* ── Render all ── */
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: DEUDAS (tarjetas, préstamos, etc.)
+═══════════════════════════════════════════════════════════ */
+const DEUDA_TIPOS = {
+  tarjeta:  { emoji:'💳', label:'Tarjeta',  color:'#f472b6' },
+  prestamo: { emoji:'🏦', label:'Préstamo', color:'#60a5fa' },
+  otro:     { emoji:'📄', label:'Otro',     color:'#94a3b8' },
+};
+
+let _deudaDeleteTarget = null;
+let _deudaCuotasOpenId = null;
+
+/* ── Sub-nav de Gastos (Gastos / Deudas) ── */
+function gastosTab(name, btn) {
+  document.querySelectorAll('.gastos-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('gastos-' + name).classList.add('active');
+  document.querySelectorAll('.gastos-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (name === 'gdeudas') deudaRenderAll();
+}
+
+/* ── Cálculo de la cuota (sistema francés si hay TNA, sin interés si no) ── */
+// Devuelve el valor de cada cuota fija. Si tna es 0 o no está definida,
+// es simplemente monto/cuotas (sin interés). Si hay TNA, usa la fórmula
+// estándar de cuota fija (sistema francés) sobre la tasa mensual (TNA/12).
+function deudaCalcularCuota(monto, cantCuotas, tna) {
+  if (!tna || tna <= 0) return monto / cantCuotas;
+  const tasaMensual = tna / 100 / 12;
+  const cuota = monto * (tasaMensual * Math.pow(1+tasaMensual, cantCuotas)) / (Math.pow(1+tasaMensual, cantCuotas) - 1);
+  return cuota;
+}
+
+/* ── Preview en vivo del formulario ── */
+function deudaUpdatePreview() {
+  const monto = parseFloat(document.getElementById('deuda-monto')?.value);
+  const cuotas = parseInt(document.getElementById('deuda-cuotas')?.value);
+  const tna = parseFloat(document.getElementById('deuda-tna')?.value) || 0;
+  const el = document.getElementById('deuda-preview');
+  if (!el) return;
+  if (!monto || !cuotas || monto<=0 || cuotas<=0) { el.textContent = ''; return; }
+  const cuota = deudaCalcularCuota(monto, cuotas, tna);
+  const total = cuota * cuotas;
+  const interesTotal = total - monto;
+  el.innerHTML = tna>0
+    ? `Cuota estimada: <strong style="color:var(--gastos)">${gastFmt(cuota)}</strong> × ${cuotas} · Total a pagar: ${gastFmt(total)} (incluye ${gastFmt(interesTotal)} de interés)`
+    : `Cuota: <strong style="color:var(--gastos)">${gastFmt(cuota)}</strong> × ${cuotas} · Sin interés`;
+}
+['deuda-monto','deuda-cuotas','deuda-tna'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', deudaUpdatePreview);
+});
+
+/* ── Agregar deuda ── */
+function deudaAdd() {
+  const nombre = document.getElementById('deuda-nombre').value.trim();
+  const tipo = document.getElementById('deuda-tipo').value;
+  const monto = parseFloat(document.getElementById('deuda-monto').value);
+  const cuotas = parseInt(document.getElementById('deuda-cuotas').value);
+  const tna = parseFloat(document.getElementById('deuda-tna').value) || 0;
+  const fecha = document.getElementById('deuda-fecha').value; // "YYYY-MM"
+
+  if (!nombre) { showToast('Ingresá un nombre para la deuda', 'err'); return; }
+  if (!monto || monto<=0) { showToast('Ingresá un monto válido', 'err'); return; }
+  if (!cuotas || cuotas<=0) { showToast('Ingresá la cantidad de cuotas', 'err'); return; }
+  if (!fecha) { showToast('Ingresá la fecha de la primera cuota', 'err'); return; }
+
+  const cuotaMonto = deudaCalcularCuota(monto, cuotas, tna);
+  const [y, m] = fecha.split('-').map(Number);
+
+  if (!GS().deudas) GS().deudas = [];
+  const id = GS().deudas.length ? Math.max(...GS().deudas.map(d=>d.id))+1 : 1;
+  GS().deudas.push({
+    id, nombre, tipo, montoTotal: monto, cantCuotas: cuotas, tna,
+    cuotaMonto, fechaInicioYear: y, fechaInicioMonth: m,
+    overrides: {}, // { "3": true|false } -> fuerza el estado de la cuota #3, pisando el cálculo automático
+  });
+  gastSave();
+  showToast('✓ Deuda agregada', 'ok');
+  document.getElementById('deuda-nombre').value = '';
+  document.getElementById('deuda-monto').value = '';
+  document.getElementById('deuda-cuotas').value = '';
+  document.getElementById('deuda-tna').value = '';
+  document.getElementById('deuda-fecha').value = '';
+  document.getElementById('deuda-preview').textContent = '';
+  deudaRenderAll();
+}
+
+/* ── Estado de cada cuota: automático según la fecha de hoy, con override manual ── */
+// Devuelve un array de {numero, fecha (YYYY-MM), monto, pagada, esOverride}
+function deudaGetCuotas(deuda) {
+  const hoy = new Date();
+  const hoyKey = hoy.getFullYear()*12 + hoy.getMonth(); // índice absoluto de mes para comparar fácil
+  const cuotas = [];
+  for (let i=1; i<=deuda.cantCuotas; i++) {
+    let m = deuda.fechaInicioMonth + (i-1);
+    let y = deuda.fechaInicioYear;
+    while (m>12) { m-=12; y++; }
+    const cuotaKey = y*12 + (m-1);
+    const automatica = cuotaKey <= hoyKey; // ya venció (o vence este mes) -> se asume pagada
+    const override = deuda.overrides?.[i];
+    const pagada = override!=null ? override : automatica;
+    cuotas.push({ numero:i, year:y, month:m, label:`${PORT_MONTHS[m-1]} ${y}`, monto: deuda.cuotaMonto, pagada, esOverride: override!=null });
+  }
+  return cuotas;
+}
+
+/* ── Render de la lista de deudas ── */
+function deudaRenderAll() {
+  const deudas = GS().deudas || [];
+  const listEl = document.getElementById('deuda-list');
+  const summaryEl = document.getElementById('deuda-summary');
+  if (!listEl) return;
+
+  if (!deudas.length) {
+    listEl.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>Sin deudas cargadas. Usá el formulario de arriba para agregar tu primera tarjeta o préstamo.</p></div>';
+    if (summaryEl) summaryEl.innerHTML = '';
+    return;
+  }
+
+  let totalDeuda=0, totalPagado=0, totalRestante=0;
+
+  const cardsHTML = deudas.map(d => {
+    const tipo = DEUDA_TIPOS[d.tipo] || DEUDA_TIPOS.otro;
+    const cuotas = deudaGetCuotas(d);
+    const pagadas = cuotas.filter(c=>c.pagada).length;
+    const montoPagado = pagadas * d.cuotaMonto;
+    const montoTotal = d.cuotaMonto * d.cantCuotas;
+    const montoRestante = montoTotal - montoPagado;
+    const pct = montoTotal>0 ? (montoPagado/montoTotal)*100 : 0;
+
+    totalDeuda += montoTotal;
+    totalPagado += montoPagado;
+    totalRestante += montoRestante;
+
+    const terminada = pagadas >= d.cantCuotas;
+
+    return `<div class="deuda-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:20px">${tipo.emoji}</span>
+          <div>
+            <p style="font-size:14px;font-weight:700">${gastEsc(d.nombre)}</p>
+            <p style="font-size:10px;color:var(--muted)">${tipo.label}${d.tna>0?` · TNA ${d.tna}%`:' · Sin interés'}${terminada?' · <span style="color:var(--ok);font-weight:700">PAGADA</span>':''}</p>
+          </div>
+        </div>
+        <button class="btn btn-sm" style="background:#3b1219;color:var(--danger)" onclick="deudaAskDelete(${d.id})">🗑️</button>
+      </div>
+      <div class="grid-3" style="gap:8px;margin-bottom:10px">
+        <div><p class="card-label" style="margin-bottom:2px">Cuota</p><p style="font-family:var(--mono);font-size:13px;font-weight:700">${gastFmt(d.cuotaMonto)}</p></div>
+        <div><p class="card-label" style="margin-bottom:2px">Pagado</p><p style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ok)">${gastFmt(montoPagado)}</p></div>
+        <div><p class="card-label" style="margin-bottom:2px">Resta pagar</p><p style="font-family:var(--mono);font-size:13px;font-weight:700;color:${terminada?'var(--ok)':'var(--danger)'}">${gastFmt(montoRestante)}</p></div>
+      </div>
+      <div class="deuda-progress-track" style="margin-bottom:8px">
+        <div class="deuda-progress-fill" style="width:${pct}%;background:${terminada?'var(--ok)':tipo.color}"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:var(--muted)">${pagadas} de ${d.cantCuotas} cuotas pagadas</span>
+        <button class="btn btn-outline btn-sm" onclick="deudaOpenCuotas(${d.id})">Ver cuotas</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  listEl.innerHTML = cardsHTML;
+
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="card" style="padding:12px;border-top:2px solid var(--gastos)">
+        <p class="card-label" style="margin-bottom:4px">Deuda total</p>
+        <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--gastos)">${gastFmt(totalDeuda)}</p>
+      </div>
+      <div class="card" style="padding:12px;border-top:2px solid var(--ok)">
+        <p class="card-label" style="margin-bottom:4px">Pagado</p>
+        <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--ok)">${gastFmt(totalPagado)}</p>
+      </div>
+      <div class="card" style="padding:12px;border-top:2px solid var(--danger)">
+        <p class="card-label" style="margin-bottom:4px">Resta pagar</p>
+        <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--danger)">${gastFmt(totalRestante)}</p>
+      </div>
+    `;
+  }
+}
+
+/* ── Modal de cuotas: ver y togglear el estado manualmente ── */
+function deudaOpenCuotas(id) {
+  _deudaCuotasOpenId = id;
+  const d = (GS().deudas||[]).find(x=>x.id===id);
+  if (!d) return;
+  document.getElementById('deuda-cuotas-title').textContent = d.nombre;
+  deudaRenderCuotasList();
+  openModal('deuda-modal-cuotas');
+}
+
+function deudaRenderCuotasList() {
+  const d = (GS().deudas||[]).find(x=>x.id===_deudaCuotasOpenId);
+  if (!d) return;
+  const cuotas = deudaGetCuotas(d);
+  const el = document.getElementById('deuda-cuotas-list');
+  el.innerHTML = cuotas.map(c => `
+    <div class="deuda-cuota-row${c.pagada?' pagada':''}" onclick="deudaToggleCuota(${c.numero})">
+      <div>
+        <span style="font-size:12px;font-weight:600">Cuota ${c.numero}/${d.cantCuotas}</span>
+        <span style="font-size:10px;color:var(--muted);margin-left:8px">${c.label}</span>
+        ${c.esOverride?'<span style="font-size:9px;color:var(--gastos);margin-left:6px">✎ manual</span>':''}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:var(--mono);font-size:12px">${gastFmt(c.monto)}</span>
+        <span style="font-size:16px">${c.pagada?'✅':'⬜'}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Al tocar una cuota: alterna manualmente pagada/pendiente (override),
+// pisando lo que hubiera calculado automáticamente según la fecha.
+function deudaToggleCuota(numero) {
+  const d = (GS().deudas||[]).find(x=>x.id===_deudaCuotasOpenId);
+  if (!d) return;
+  const cuotas = deudaGetCuotas(d);
+  const actual = cuotas.find(c=>c.numero===numero);
+  if (!d.overrides) d.overrides = {};
+  d.overrides[numero] = !actual.pagada;
+  gastSave();
+  deudaRenderCuotasList();
+  deudaRenderAll();
+}
+
+/* ── Eliminar deuda ── */
+function deudaAskDelete(id) {
+  _deudaDeleteTarget = id;
+  openModal('deuda-modal-del');
+}
+function deudaConfirmDelete() {
+  if (_deudaDeleteTarget==null) return;
+  GS().deudas = (GS().deudas||[]).filter(d=>d.id!==_deudaDeleteTarget);
+  gastSave();
+  _deudaDeleteTarget = null;
+  closeModal('deuda-modal-del');
+  showToast('Deuda eliminada', 'ok');
+  deudaRenderAll();
+}
+
+// Escapar HTML básico para nombres de deuda (evita romper el markup si el
+// usuario carga caracteres especiales en el nombre)
+function gastEsc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+
 function gastRenderAll() {
   gastRenderSummary();
   gastRenderList();
@@ -5130,10 +5479,12 @@ function gastRenderAll() {
 function ongastosEnter() {
   gastBuildYearSelect();
   gastRenderAll();
+  deudaRenderAll();
 }
 
 // Fecha de hoy
 document.getElementById('gast-date').value = gastToday.toISOString().split('T')[0];
+document.getElementById('deuda-fecha').value = gastToday.toISOString().slice(0,7);
 // Inflación guardada
 const _gastInflKey = gastMonthKey(gastToday.getFullYear(), gastToday.getMonth());
 if (GS().inflation?.[_gastInflKey] != null)
@@ -5141,6 +5492,7 @@ if (GS().inflation?.[_gastInflKey] != null)
 
 gastBuildYearSelect();
 gastRenderAll();
+deudaRenderAll();
 window.addEventListener('resize', ()=>{ if(document.getElementById('section-gastos').classList.contains('active')) gastRenderMonthly(); });
 
 /* ═══════════════════════════════════════════════════════════
