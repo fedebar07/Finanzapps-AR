@@ -1172,6 +1172,7 @@
         </div>
       </div>
 
+      <div id="port-deuda-vs-inv" style="margin-bottom:14px"></div>
       <div class="grid-4" id="port-kpis" style="margin-bottom:14px"></div>
       <!-- Evolución -->
       <div class="card" style="margin-bottom:14px">
@@ -1501,6 +1502,9 @@
   <div id="gastos-ggastos" class="gastos-panel active">
   <div class="content">
 
+    <!-- Salud financiera: ratio cuota/ingreso + fondo de emergencia -->
+    <div id="gast-salud-financiera" style="margin-bottom:14px"></div>
+
     <!-- Resumen -->
     <div class="grid-6" id="gast-summary" style="margin-bottom:14px"></div>
 
@@ -1712,6 +1716,9 @@
   ══════════════════════════════════════════ -->
   <div id="gastos-gdeudas" class="gastos-panel">
   <div class="content">
+
+    <!-- Deuda vs. Inversión (espejo del que se ve en Portafolio) -->
+    <div id="deuda-vs-inv-mirror" style="margin-bottom:14px"></div>
 
     <!-- Resumen de deudas -->
     <div class="grid-3" id="deuda-summary" style="margin-bottom:14px"></div>
@@ -3442,6 +3449,76 @@ function portRenderDist(){
   }).join('');
 }
 
+/* ── Deuda vs. Inversión ──
+   Compara la TNA de tu deuda más cara contra la TNA (o rendimiento anualizado)
+   de tu inversión más rendidora. Se usa tanto en el dashboard de Portafolio
+   como en espejo dentro de la pestaña Deudas (módulo Gastos). */
+function calcDeudaVsInversion(){
+  const deudas = (STATE.gastos?.deudas)||[];
+  let maxDeuda = null;
+  deudas.forEach(d=>{
+    // Solo cuentan las deudas todavía activas (no totalmente pagadas) y con interés (TNA>0).
+    const cuotas = (typeof deudaGetCuotas==='function') ? deudaGetCuotas(d) : [];
+    const pagadas = cuotas.filter(c=>c.pagada).length;
+    const activa = pagadas < d.cantCuotas;
+    if(activa && d.tna>0){
+      if(!maxDeuda || d.tna>maxDeuda.tna) maxDeuda = {nombre:d.nombre, tna:d.tna};
+    }
+  });
+
+  let bestInv = null;
+  PORT_CAT_DEFS.forEach(def=>{
+    const cs = STATE.portfolio?.cats?.[def.id];
+    if(!cs || !cs.active) return;
+    let tna;
+    if(def.id==='pf'){
+      // El PF tiene TNA explícita cargada por el usuario.
+      tna = cs.tna||0;
+    } else {
+      // Para el resto de las categorías no hay una TNA fija: se estima
+      // anualizando el rendimiento del último mes cargado (rendimiento
+      // mensual × 12). Es una aproximación simple, no una tasa garantizada.
+      const gainARS = portCatMonthlyGainARS(def.id, PORT_NOW_M, PORT_NOW_Y);
+      const capARS  = portToARSWithType(cs.capital, cs.currency, cs.usdType);
+      tna = capARS>0 ? (gainARS/capARS)*100*12 : 0;
+    }
+    if(tna>0 && (!bestInv || tna>bestInv.tna)) bestInv = {nombre:def.name, tna, estimado:def.id!=='pf'};
+  });
+
+  return {maxDeuda, bestInv};
+}
+
+function portRenderDeudaVsInversion(){
+  const el = document.getElementById('port-deuda-vs-inv');
+  if(!el) return;
+  const {maxDeuda, bestInv} = calcDeudaVsInversion();
+  if(!maxDeuda){ el.innerHTML=''; return; } // sin deudas activas con interés: no hay nada que alertar
+
+  const convieneCancelar = !bestInv || maxDeuda.tna > bestInv.tna;
+  const diff = bestInv ? Math.abs(maxDeuda.tna - bestInv.tna) : maxDeuda.tna;
+  const color = convieneCancelar ? 'var(--danger)' : 'var(--ok)';
+
+  el.innerHTML = `
+    <div class="card" style="border-left:3px solid ${color}">
+      <p class="card-label" style="margin-bottom:10px">⚠️ Deuda vs. Inversión</p>
+      <div class="grid-2" style="gap:12px;margin-bottom:10px">
+        <div>
+          <p style="font-size:10px;color:var(--muted)">Tu deuda más cara</p>
+          <p style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--danger)">${maxDeuda.nombre} — ${maxDeuda.tna}% TNA</p>
+        </div>
+        <div>
+          <p style="font-size:10px;color:var(--muted)">Tu inversión más rendidora</p>
+          <p style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--port)">${bestInv?`${bestInv.nombre} — ${bestInv.tna.toFixed(1)}% TNA${bestInv.estimado?' (estimada)':''}`:'Sin inversiones activas'}</p>
+        </div>
+      </div>
+      <p style="font-size:12px;font-weight:700;color:${color}">
+        ${convieneCancelar
+          ? `👉 Te conviene cancelar deuda antes de invertir (ahorrás ${diff.toFixed(1)} puntos de TNA)`
+          : `👉 Tu inversión rinde más que tu deuda — mantenerla es razonable, siempre que no arriesgues la cuota`}
+      </p>
+    </div>`;
+}
+
 /* ── Capital ── */
 function portRenderCapital(){
   const pfDef=PORT_CAT_DEFS[0], pfCs=portGetCatState('pf');
@@ -3559,6 +3636,7 @@ function portRenderAports(){
 
 /* ── Render all ── */
 function portRenderDash(){
+  portRenderDeudaVsInversion();
   portRenderKPIs();
   portRenderCharts();
   portRenderDollarRates();
@@ -4681,6 +4759,77 @@ function gastSetFilter(val) {
 }
 
 /* ── Resumen ── */
+/* ── Salud financiera: ratio cuota/ingreso + fondo de emergencia ──
+   Cruza datos de Deudas (cuotas activas), Gastos (ingreso/gasto del mes)
+   y Portafolio (solo Cajas de ahorro, por decisión explícita: Plazo Fijo,
+   Acciones, CEDEARs, Bonos y Cripto NO cuentan como reserva líquida). */
+function calcSaludFinanciera() {
+  const today = gastToday;
+  const curKey = gastMonthKey(today.getFullYear(), today.getMonth());
+  const exps = GS().expenses || [];
+  const ingresoMes = exps.filter(e => e.date.startsWith(curKey) && gastIsIncome(e)).reduce((s,e)=>s+e.amount, 0);
+  const gastoMes   = exps.filter(e => e.date.startsWith(curKey) && gastIsExpense(e)).reduce((s,e)=>s+e.amount, 0);
+
+  // Cuota/Ingreso: suma de cuotas de deudas todavía activas (no saldadas)
+  const deudas = GS().deudas || [];
+  let cuotaTotal = 0;
+  deudas.forEach(d => {
+    const cuotas = (typeof deudaGetCuotas === 'function') ? deudaGetCuotas(d) : [];
+    const pagadas = cuotas.filter(c => c.pagada).length;
+    if (pagadas < d.cantCuotas) cuotaTotal += d.cuotaMonto;
+  });
+  const ratioCuotaIngreso = ingresoMes > 0 ? (cuotaTotal / ingresoMes) * 100 : null;
+
+  // Fondo de emergencia: solo Cajas de ahorro, convertidas a ARS
+  const cajas = STATE.portfolio?.cajas || [];
+  let liquidoARS = 0;
+  cajas.forEach(c => {
+    const { balance } = portGetCajaBalance(c, PORT_NOW_M, PORT_NOW_Y);
+    liquidoARS += portToARSWithType(balance, c.currency, c.usdType);
+  });
+  const mesesCubiertos = gastoMes > 0 ? liquidoARS / gastoMes : null;
+
+  return { cuotaTotal, ingresoMes, ratioCuotaIngreso, liquidoARS, gastoMes, mesesCubiertos };
+}
+
+function gastSemaforoCuota(pct) {
+  if (pct == null) return { color:'var(--muted)', emoji:'⚪', label:'Sin ingresos cargados este mes' };
+  if (pct < 20)     return { color:'var(--ok)',    emoji:'🟢', label:'Cómodo' };
+  if (pct <= 35)    return { color:'var(--warn)',  emoji:'🟡', label:'Sin margen para imprevistos' };
+  return                   { color:'var(--danger)',emoji:'🔴', label:'Riesgo alto' };
+}
+function gastSemaforoFondo(meses) {
+  if (meses == null) return { color:'var(--muted)', emoji:'⚪', label:'Sin gastos cargados este mes' };
+  if (meses < 1)      return { color:'var(--danger)',emoji:'🔴', label:'Crítico' };
+  if (meses < 3)       return { color:'var(--warn)',  emoji:'🟡', label:'En construcción' };
+  return                     { color:'var(--ok)',    emoji:'🟢', label:'Cubierto' };
+}
+
+function gastRenderSaludFinanciera() {
+  const el = document.getElementById('gast-salud-financiera');
+  if (!el) return;
+  const { ratioCuotaIngreso, mesesCubiertos } = calcSaludFinanciera();
+  const c1 = gastSemaforoCuota(ratioCuotaIngreso);
+  const c2 = gastSemaforoFondo(mesesCubiertos);
+
+  el.innerHTML = `
+    <div class="card">
+      <p class="card-label" style="margin-bottom:12px">🩺 Salud financiera</p>
+      <div class="grid-2" style="gap:14px">
+        <div>
+          <p style="font-size:10px;color:var(--muted);margin-bottom:4px">Cuota / Ingreso</p>
+          <p style="font-family:var(--mono);font-size:22px;font-weight:700;color:${c1.color}">${ratioCuotaIngreso!=null?ratioCuotaIngreso.toFixed(0)+'%':'—'} ${c1.emoji}</p>
+          <p style="font-size:11px;color:${c1.color};margin-top:2px">${c1.label}</p>
+        </div>
+        <div>
+          <p style="font-size:10px;color:var(--muted);margin-bottom:4px">Fondo de emergencia</p>
+          <p style="font-family:var(--mono);font-size:22px;font-weight:700;color:${c2.color}">${mesesCubiertos!=null?mesesCubiertos.toFixed(1)+' meses':'—'} ${c2.emoji}</p>
+          <p style="font-size:11px;color:${c2.color};margin-top:2px">${c2.label} <span style="color:var(--muted)">(recomendado: 3-6 meses)</span></p>
+        </div>
+      </div>
+    </div>`;
+}
+
 function gastRenderSummary() {
   const exps  = GS().expenses||[];
   const today = gastToday;
@@ -5326,10 +5475,29 @@ function deudaGetCuotas(deuda) {
 }
 
 /* ── Render de la lista de deudas ── */
+function deudaRenderMirror() {
+  const el = document.getElementById('deuda-vs-inv-mirror');
+  if (!el) return;
+  const {maxDeuda, bestInv} = calcDeudaVsInversion();
+  if (!maxDeuda) { el.innerHTML=''; return; }
+  const convieneCancelar = !bestInv || maxDeuda.tna > bestInv.tna;
+  const color = convieneCancelar ? 'var(--danger)' : 'var(--ok)';
+  el.innerHTML = `
+    <div class="card" style="border-left:3px solid ${color};padding:14px 16px">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:4px">📊 Comparado con tu mejor inversión (${bestInv?`${bestInv.nombre}, ${bestInv.tna.toFixed(1)}% TNA${bestInv.estimado?' est.':''}`:'sin inversiones activas'})</p>
+      <p style="font-size:13px;font-weight:700;color:${color}">
+        ${convieneCancelar
+          ? `Esta deuda (${maxDeuda.nombre}, ${maxDeuda.tna}% TNA) te cuesta más de lo que rinde tu inversión. Priorizá cancelarla.`
+          : `Tu inversión rinde más que esta deuda — no es urgente cancelarla antes de tiempo.`}
+      </p>
+    </div>`;
+}
+
 function deudaRenderAll() {
   const deudas = GS().deudas || [];
   const listEl = document.getElementById('deuda-list');
   const summaryEl = document.getElementById('deuda-summary');
+  deudaRenderMirror();
   if (!listEl) return;
 
   if (!deudas.length) {
@@ -5468,6 +5636,7 @@ function gastEsc(str) {
 
 
 function gastRenderAll() {
+  gastRenderSaludFinanciera();
   gastRenderSummary();
   gastRenderList();
   gastRenderWeekBars();
