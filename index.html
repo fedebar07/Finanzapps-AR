@@ -1415,6 +1415,32 @@
         <div id="hodl-retiradas-lista"></div>
         <button class="btn btn-outline btn-sm" style="margin-top:6px;border-color:rgba(248,81,73,.3);color:var(--danger)" onclick="hodlAgregarRetirada()">− Registrar retirada</button>
       </div>
+      <!-- Historial mensual del patrimonio (foto automática) -->
+      <div style="padding:10px 14px;border-top:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">📊 Historial mensual del patrimonio</span>
+          <button class="gast-toggle-btn" onclick="gastToggleSection('hodl-foto-wrap', this)">ocultar</button>
+        </div>
+        <div class="gast-collapsible" id="hodl-foto-wrap">
+          <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
+            Se guarda solo cada vez que interactuás con Hodler (DCA + Bots + capital disponible). Necesita presupuesto cargado para poder calcular "todo el capital". Podés corregir un mes a mano si hizo falta.
+          </p>
+          <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px">
+            <button class="btn btn-outline btn-sm" onclick="hodlChangeFotoYear(-1)">‹</button>
+            <span id="hodl-foto-chart-year-label" style="font-family:var(--mono);font-size:13px;min-width:50px;text-align:center"></span>
+            <button class="btn btn-outline btn-sm" onclick="hodlChangeFotoYear(1)">›</button>
+          </div>
+          <div style="position:relative;height:180px"><canvas id="hodl-foto-chart"></canvas></div>
+          <hr class="divider">
+          <p style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Corregir un mes a mano</p>
+          <div class="form-row" style="margin-bottom:8px">
+            <div class="form-group" style="margin:0"><label>Mes</label><select id="hodl-foto-month" class="input"></select></div>
+            <div class="form-group" style="margin:0"><label>Año</label><input type="number" id="hodl-foto-year" class="input"></div>
+          </div>
+          <div class="form-group" style="margin-bottom:8px"><label>Patrimonio total (USDT)</label><input type="number" id="hodl-foto-monto" class="input" placeholder="Ej. 5230"></div>
+          <button class="btn btn-ghost btn-sm btn-full" onclick="hodlSaveFotoManual()">Guardar corrección</button>
+        </div>
+      </div>
     </div>
 
     <!-- TAB DCA -->
@@ -2028,6 +2054,7 @@ function buildDefaultState() {
       presupuesto: 0,
       aportes: [],
       retiradas: [],
+      fotos: {}, // { "2026-09": { patrimonio: 5230.10, manual:false } } — historial mensual del patrimonio total
     },
     gastos: {
       expenses: [],
@@ -2801,6 +2828,45 @@ function portBuildDefaultCats() {
   });
 }
 
+/* ── Sincronización de la categoría Cripto con Hodler ──
+   "Criptomonedas" deja de cargarse a mano: su capital se sincroniza con el
+   patrimonio total que calcula Hodler (DCA + Bots + capital disponible).
+   La primera vez que corre, limpia resultados y aportes manuales viejos de
+   esta categoría para que no queden mezclados con el nuevo modelo automático. */
+function portSyncCriptoConHodler(){
+  const cs = portGetCatState('cripto');
+  if (!cs) return;
+
+  if (cs.syncSource !== 'hodler') {
+    // Migración de una sola vez.
+    PS().results = (PS().results||[]).filter(r=>r.catId!=='cripto');
+    PS().aports  = (PS().aports||[]).filter(a=>a.catId!=='cripto');
+    cs.syncSource = 'hodler';
+  }
+
+  const { patrimonio } = hodlCalcPatrimonioTotal();
+  const nuevoCapital = patrimonio ?? 0;
+  const wasActive = cs.active;
+
+  cs.currency = 'USD';
+  if (!cs.usdType) cs.usdType = 'oficial';
+  cs.capital = nuevoCapital;
+  cs.active  = nuevoCapital > 0;
+
+  // Fecha de activación = el mes más antiguo del historial de Hodler, para
+  // que el gráfico de evolución arranque desde ahí y no desde "hoy".
+  const fotos = STATE.hodler?.fotos || {};
+  const keys = Object.keys(fotos).sort();
+  if (keys.length) {
+    const [y0,m0] = keys[0].split('-').map(Number);
+    cs.startYear = y0; cs.startMonth = m0;
+  } else if (!wasActive && cs.active) {
+    cs.startMonth = PORT_NOW_M; cs.startYear = PORT_NOW_Y;
+  }
+
+  portSave();
+}
+
 /* ── Helpers financieros ── */
 const portTCKey   = (m,y)  => `${y}-${String(m).padStart(2,'0')}`;
 const portTCAt    = (m,y)  => PS().tcHistory?.[portTCKey(m,y)] || PS().tc;
@@ -2898,6 +2964,7 @@ function portPFNextMaturity(cs){
 function portCatCapitalAt(id,m,y){
   const cs=portGetCatState(id);
   if(!cs) return 0;
+  if (id==='cripto') return portCriptoCapitalAtFromHodler(m,y);
   // Si el mes consultado es ANTERIOR a la fecha en que se activó esta categoría,
   // todavía no existía: el capital en ese momento es $0, no el capital original.
   // (Bug corregido: antes devolvía el capital inicial incluso en meses previos
@@ -2911,9 +2978,31 @@ function portCatCapitalAt(id,m,y){
   const rB=(PS().results||[]).filter(r=>r.catId===id&&(r.year<y||(r.year===y&&r.month<m))).reduce((s,r)=>s+r.gain,0);
   return orig+aB+rB;
 }
+// Capital de Cripto en un mes histórico dado, tomado del historial mensual de
+// Hodler (no de aportes/resultados de Portafolio, que ya no aplican acá).
+// Relleno hacia adelante: si un mes no tiene foto propia, usa la última foto
+// conocida hasta ese momento (igual que hace el gráfico de Hodler con spanGaps).
+function portCriptoCapitalAtFromHodler(m,y){
+  const fotos = STATE.hodler?.fotos || {};
+  const keys = Object.keys(fotos).sort();
+  if (!keys.length) return 0;
+  const targetKey = hodlFotoKey(m,y);
+  if (targetKey < keys[0]) return 0; // antes del primer registro: todavía no existía
+  let ultimo = null;
+  for (const k of keys) {
+    if (k <= targetKey) ultimo = fotos[k].patrimonio;
+    else break;
+  }
+  return ultimo ?? 0;
+}
 function portCatMonthlyGainARS(id,m,y){
   const cs=portGetCatState(id);
   if(!cs||!cs.active) return 0;
+  // Cripto está sincronizada con Hodler, que no separa "ganancia del mes" de
+  // aportes/retiros dentro de su patrimonio total — mezclar ambas cosas acá
+  // daría un número engañoso. Se devuelve null como señal explícita de
+  // "no aplica", y cada lugar que usa esta función lo trata como tal.
+  if(id==='cripto') return null;
   if(id==='pf'){
     const balEnd=portPFBalance(cs,m,y);
     const pm=m===1?12:m-1, py=m===1?y-1:y;
@@ -2955,6 +3044,7 @@ function portBuildTimeline(){
 
 /* ── Sub-nav ── */
 function portTab(name,btn){
+  portSyncCriptoConHodler();
   document.querySelectorAll('.port-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('port-'+name).classList.add('active');
   document.querySelectorAll('.port-tab').forEach(b=>b.classList.remove('active'));
@@ -3314,10 +3404,10 @@ function portPopulateSelects(){
   ['port-res-year','port-aport-year','port-cajamov-year','port-infl-year','port-foto-year'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value=PORT_NOW_Y;
   });
-  const nonPF=PORT_CAT_DEFS.slice(1).map(d=>`<option value="${d.id}">${d.icon} ${d.name}</option>`).join('');
+  const nonPF=PORT_CAT_DEFS.filter(d=>d.id!=='pf'&&d.id!=='cripto').map(d=>`<option value="${d.id}">${d.icon} ${d.name}</option>`).join('');
   const resCat=document.getElementById('port-res-cat');
   if(resCat) resCat.innerHTML='<option value="">Seleccioná</option>'+nonPF;
-  const allOpts=PORT_CAT_DEFS.map(d=>`<option value="${d.id}">${d.icon} ${d.name}</option>`).join('');
+  const allOpts=PORT_CAT_DEFS.filter(d=>d.id!=='cripto').map(d=>`<option value="${d.id}">${d.icon} ${d.name}</option>`).join('');
   const aportCat=document.getElementById('port-aport-cat');
   if(aportCat) aportCat.innerHTML='<option value="">Seleccioná</option>'+allOpts;
   const cajaSel=document.getElementById('port-cajamov-caja');
@@ -3331,7 +3421,8 @@ function portRenderKPIs(){
   active.forEach(d=>{
     const cs=portGetCatState(d.id);
     totalCap  += d.id==='pf' ? portPFBalance(cs,PORT_NOW_M,PORT_NOW_Y) : portToARSWithType(cs.capital,cs.currency,cs.usdType);
-    totalGain += portCatMonthlyGainARS(d.id,PORT_NOW_M,PORT_NOW_Y);
+    const g = portCatMonthlyGainARS(d.id,PORT_NOW_M,PORT_NOW_Y);
+    if (g!=null) totalGain += g; // cripto devuelve null (sincronizada con Hodler, sin desglose mensual propio)
   });
   (PS().cajas||[]).forEach(c=>{
     const {balance,interest}=portGetCajaBalance(c,PORT_NOW_M,PORT_NOW_Y);
@@ -3479,6 +3570,7 @@ function calcDeudaVsInversion(){
       // anualizando el rendimiento del último mes cargado (rendimiento
       // mensual × 12). Es una aproximación simple, no una tasa garantizada.
       const gainARS = portCatMonthlyGainARS(def.id, PORT_NOW_M, PORT_NOW_Y);
+      if (gainARS==null) return; // cripto (sincronizada con Hodler): no hay una tasa mensual propia para estimar
       const capARS  = portToARSWithType(cs.capital, cs.currency, cs.usdType);
       tna = capARS>0 ? (gainARS/capARS)*100*12 : 0;
     }
@@ -3550,28 +3642,32 @@ function portRenderCapital(){
   const nonPF=PORT_CAT_DEFS.slice(1);
   document.getElementById('port-cat-grid').innerHTML=nonPF.map(d=>{
     const cs=portGetCatState(d.id);
+    const isSynced=d.id==='cripto';
     const gainARS=portCatMonthlyGainARS(d.id,PORT_NOW_M,PORT_NOW_Y);
     const capARS=portToARSWithType(cs.capital,cs.currency,cs.usdType);
-    const p=capARS>0?(gainARS/capARS)*100:0;
+    const p=(gainARS!=null && capARS>0)?(gainARS/capARS)*100:0;
     const tl=portBuildTimeline();
-    const totGainARS=tl.reduce((s,{month,year})=>s+portCatMonthlyGainARS(d.id,month,year),0);
+    const totGainARS=tl.reduce((s,{month,year})=>{const g=portCatMonthlyGainARS(d.id,month,year); return s+(g??0);},0);
     return `<div class="port-cat-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
         <div>
           <p style="font-size:13px;font-weight:800;color:${d.color};margin-bottom:2px">${d.icon} ${d.name}</p>
-          <p style="font-size:10px;color:var(--muted)">${cs.currency}${cs.currency==='USD'&&cs.usdType?' '+PORT_DOLLAR_TYPES.find(t=>t.id===cs.usdType)?.name:''} ${cs.active?'· Activo':'· Sin capital'}</p>
+          <p style="font-size:10px;color:var(--muted)">${cs.currency}${cs.currency==='USD'&&cs.usdType?' '+PORT_DOLLAR_TYPES.find(t=>t.id===cs.usdType)?.name:''} ${cs.active?'· Activo':'· Sin capital'}${isSynced?' · 🔗 Hodler':''}</p>
         </div>
         <button class="btn btn-outline btn-sm" onclick="portOpenEditCat('${d.id}')">✎</button>
       </div>
       ${cs.active?`
         <p class="card-label">Capital invertido</p>
         <p style="font-family:var(--mono);font-size:16px;font-weight:700;margin-bottom:10px">${portFmt(portToDisplay(capARS))}</p>
+        ${isSynced?`
+        <p style="font-size:11px;color:var(--muted);line-height:1.5">🔗 Sincronizado con Hodler (DCA + Bots + capital disponible). El desglose de ganancia mensual se ve en la sección Hodler, no acá.</p>`
+        :`
         <div class="grid-2" style="gap:8px">
           <div><p class="card-label">Rend. este mes</p><p style="font-family:var(--mono);font-size:12px;font-weight:700;color:${gainARS>=0?'var(--port)':'var(--danger)'}">${portFmt(portToDisplay(gainARS))}</p><p style="font-size:10px;color:var(--muted)">${portPct(p)}</p></div>
           <div><p class="card-label">Total histórico</p><p style="font-family:var(--mono);font-size:12px;font-weight:700;color:${totGainARS>=0?'var(--port)':'var(--danger)'}">${portFmt(portToDisplay(totGainARS))}</p></div>
         </div>
-        <div class="progress-track" style="margin-top:10px"><div class="progress-fill" style="width:${Math.min(100,Math.abs(p)*5)}%;background:${gainARS>=0?d.color:'var(--danger)'}"></div></div>`
-      :'<p style="font-size:12px;color:var(--muted)">Tocá ✎ para cargar tu capital.</p>'}
+        <div class="progress-track" style="margin-top:10px"><div class="progress-fill" style="width:${Math.min(100,Math.abs(p)*5)}%;background:${gainARS>=0?d.color:'var(--danger)'}"></div></div>`}`
+      :(isSynced?'<p style="font-size:12px;color:var(--muted)">Sin capital en Hodler todavía.</p>':'<p style="font-size:12px;color:var(--muted)">Tocá ✎ para cargar tu capital.</p>')}
     </div>`;
   }).join('');
 
@@ -3665,7 +3761,12 @@ function portOpenEditCat(catId){
   curSel.value=cs.currency||'ARS';
   usdSel.value=cs.usdType||'oficial';
   document.getElementById('port-editcat-usdtype-wrap').style.display=curSel.value==='USD'?'block':'none';
-  if(cs.active){
+  if(catId==='cripto'){
+    capInput.readOnly=true; capInput.style.opacity='.5';
+    capNote.textContent='🔗 Sincronizado automáticamente con Hodler (DCA + Bots + capital disponible) — no se edita a mano acá.';
+    curSel.disabled=true; usdSel.disabled=false;
+    curNote.textContent='Elegí qué cotización del dólar usar para convertir este capital a pesos.';
+  }else if(cs.active){
     capInput.readOnly=true; capInput.style.opacity='.5';
     capNote.textContent='Categoría ya activa. Para sumar capital usá Aporte (pestaña Aportes).';
     curSel.disabled=true; usdSel.disabled=true;
@@ -3691,6 +3792,12 @@ function portOnEditCatCurChange(){
 function portSaveEditCat(){
   if(!_portEditCatId) return;
   const cs=portGetCatState(_portEditCatId);
+  if(_portEditCatId==='cripto'){
+    cs.usdType=document.getElementById('port-editcat-usdtype').value;
+    portSave(); closeModal('port-modal-editcat'); portRenderAll();
+    showToast('Tipo de dólar actualizado','ok');
+    return;
+  }
   if(cs.active){
     if(_portEditCatId==='pf') cs.tna=parseFloat(document.getElementById('port-editcat-tna').value)||110;
   }else{
@@ -3861,6 +3968,7 @@ function portToggleReal(){
 /* ── Init ── */
 function onportfolioEnter(){
   portBuildDefaultCats();
+  portSyncCriptoConHodler();
   portPopulateSelects();
   portRenderDash();
   if(!_portInflLoaded){portFetchInflacion();_portInflLoaded=true;}
@@ -4002,20 +4110,57 @@ function hodlCapitalConComision(compras) {
 function hodlCalcResumen(data) {
   const compras = data.compras || [];
   const ventas  = data.ventas  || [];
-  const comPct  = data.comision_pct ?? 0.1;
-  const capitalInvertido  = hodlCapitalConComision(compras);
-  const cantidadComprada  = compras.reduce((s, c) => s + c.cantidad, 0);
-  const promedioHistorico = cantidadComprada > 0 ? capitalInvertido / cantidadComprada : 0;
-  const cantidadVendida   = ventas.reduce((s, v) => s + v.cantidad, 0);
-  const ingresosBrutos    = ventas.reduce((s, v) => s + v.monto, 0);
-  const comisionesVenta   = ventas.reduce((s, v) => s + (v.comision||0), 0);
-  const ingresosNetos     = ingresosBrutos - comisionesVenta;
-  const costoVendido      = cantidadVendida * promedioHistorico;
-  const gpRealizado       = ingresosNetos - costoVendido;
-  const cantidadActual    = cantidadComprada - cantidadVendida;
-  const costoAbierto      = capitalInvertido - costoVendido;
-  const promedio          = cantidadActual > 0 ? costoAbierto / cantidadActual : 0;
-  return {capitalInvertido, cantidadComprada, promedio, cantidadVendida, ingresosNetos, costoVendido, gpRealizado, cantidadActual, capitalRecuperado: ingresosNetos};
+
+  // ── Costo promedio ponderado MÓVIL (perpetuo) ──
+  // En vez de calcular un único promedio con TODAS las compras (pasadas y
+  // futuras) y aplicarlo a todas las ventas por igual, procesamos compras y
+  // ventas en orden cronológico real. Cada venta usa el promedio calculado
+  // con SOLO lo comprado hasta ese momento — el mismo método que usa
+  // contabilidad de inventarios (costo promedio ponderado perpetuo).
+  // Así, una compra posterior nunca cambia retroactivamente la ganancia
+  // ya registrada de una venta pasada.
+  const eventos = [
+    ...compras.map((c, idx) => ({ tipo:'compra', fecha:c.fecha||'', idx, ref:c })),
+    ...ventas.map((v, idx)  => ({ tipo:'venta',  fecha:v.fecha||'',  idx, ref:v })),
+  ].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+  let qty = 0;            // cantidad en cartera en cada momento del recorrido
+  let costoBase = 0;      // costo (con comisiones) de lo que sigue en cartera en cada momento
+  let gpRealizado = 0;
+  let ingresosNetos = 0;
+  let costoVendidoTotal = 0;
+  const ventasDetalle = new Array(ventas.length); // paralelo al array original de ventas, por índice
+
+  eventos.forEach(ev => {
+    if (ev.tipo === 'compra') {
+      qty += ev.ref.cantidad;
+      costoBase += ev.ref.inversion + (ev.ref.comision || 0);
+    } else {
+      const promedioAlMomento = qty > 0 ? costoBase / qty : 0;
+      const costoVendido = ev.ref.cantidad * promedioAlMomento;
+      const neto = ev.ref.monto - (ev.ref.comision || 0);
+      const gp   = neto - costoVendido;
+      gpRealizado += gp;
+      ingresosNetos += neto;
+      costoVendidoTotal += costoVendido;
+      qty -= ev.ref.cantidad;
+      costoBase -= costoVendido;
+      ventasDetalle[ev.idx] = { gp, costoVendido, promedioAlMomento };
+    }
+  });
+
+  const capitalInvertido = hodlCapitalConComision(compras); // total histórico invertido (bruto, no neto de ventas)
+  const cantidadComprada = compras.reduce((s, c) => s + c.cantidad, 0);
+  const cantidadVendida  = ventas.reduce((s, v) => s + v.cantidad, 0);
+  const cantidadActual   = qty;        // cantidad que sigue en cartera al final del recorrido
+  const costoAbierto     = costoBase;  // costo de lo que queda, ya neto de lo vendido
+  const promedio         = cantidadActual > 0 ? costoAbierto / cantidadActual : 0;
+
+  return {
+    capitalInvertido, cantidadComprada, promedio, cantidadVendida,
+    ingresosNetos, costoVendido: costoVendidoTotal, gpRealizado,
+    cantidadActual, capitalRecuperado: ingresosNetos, ventasDetalle,
+  };
 }
 function hodlPrecioObjetivo(promedio, obj, comPct) {
   const f = 1 - comPct/100;
@@ -4091,7 +4236,9 @@ function hodlRenderActivo(nombre) {
   // Filas ventas
   const gpRealizadoColor = res.gpRealizado >= 0 ? 'var(--ok)' : 'var(--danger)';
   const filasVentas = ventas.map((v, i) => {
-    const gpV = (v.monto - (v.comision||0)) - v.cantidad * res.promedio;
+    // Ganancia real de ESA venta, calculada con el promedio vigente en el
+    // momento en que ocurrió (no con el promedio de hoy — ver hodlCalcResumen).
+    const gpV = res.ventasDetalle?.[i]?.gp ?? ((v.monto - (v.comision||0)) - v.cantidad * res.promedio);
     const gpVColor = gpV >= 0 ? 'var(--ok)' : 'var(--danger)';
     return `<tr class="hodl-fila-venta">
       <td><span class="hodl-badge-venta">Venta</span></td>
@@ -4313,7 +4460,12 @@ function hodlPedirEliminarActivo(nombre) {
 }
 
 /* ── Resumen global ── */
-function hodlRenderResumen() {
+/* ── Cálculo del patrimonio total (fuente única de verdad) ──
+   Se usa tanto para pintar el resumen en pantalla como para capturar la
+   "foto" mensual del historial — así el número guardado en el historial
+   es siempre EXACTAMENTE el mismo que se ve en la pantalla en ese momento,
+   sin fórmulas duplicadas que puedan desincronizarse. */
+function hodlCalcPatrimonioTotal() {
   const activos = HS().activos || {};
   let capitalDCA=0, valorDCA=0, capitalRecupDCA=0, gpRealizadoDCA=0, tienePrecios=false;
   Object.keys(activos).forEach(nombre => {
@@ -4322,8 +4474,6 @@ function hodlRenderResumen() {
     capitalRecupDCA += res.capitalRecuperado;
     gpRealizadoDCA  += res.gpRealizado;
     const cache = _hodlPrices[nombre];
-    // Valor de mercado de lo que AÚN tenés en cartera (sin sumar ventas ya cobradas,
-    // porque esas ya se reflejan en capitalRecuperado / capital disponible).
     if (cache && res.cantidadActual>0) { valorDCA += res.cantidadActual*cache.precio; tienePrecios=true; }
     else valorDCA += res.cantidadActual*res.promedio;
   });
@@ -4334,24 +4484,141 @@ function hodlRenderResumen() {
   const gpBotsCerr  = botsCerrados.reduce((s,b)=>s+b.ganancia,0);
   const totalInv    = capitalDCA + capitalBots;
   const totalValor  = valorDCA + valorBots;
-  // G/P total = (valor de mercado de lo que sigue en cartera − su costo de origen,
-  // es decir la plusvalía NO realizada) + ganancia YA realizada en ventas DCA
-  // + ganancia ya realizada en bots cerrados.
-  // costoAbiertoDCA = lo que costó comprar lo que aún tenés en cartera
-  //                 = capital invertido total − costo de lo ya vendido
-  //                 = capitalDCA − (capitalRecupDCA − gpRealizadoDCA)
   const costoAbiertoDCA = capitalDCA - (capitalRecupDCA - gpRealizadoDCA);
   const totalGP     = (valorDCA - costoAbiertoDCA) + gpRealizadoDCA + (valorBots - capitalBots) + gpBotsCerr;
   const totalGPpct  = totalInv>0?(totalGP/totalInv*100):0;
-  const gpColor     = totalGP>=0?'var(--ok)':'var(--danger)';
-  const gpSign      = totalGP>=0?'+':'';
+
+  const pres = HS().presupuesto || 0;
+  const totalAp = (HS().aportes||[]).reduce((s,a)=>s+a.monto,0);
+  const totalRet= (HS().retiradas||[]).reduce((s,r)=>s+r.monto,0);
+  const capitalNetoDCA = capitalDCA - capitalRecupDCA;
+  const capDisp = pres>0 ? pres+totalAp-totalRet-capitalNetoDCA-capitalBots+gpBotsCerr : null;
+
+  const hayDatos = tienePrecios || capitalBots>0;
+  // Patrimonio MOSTRADO en pantalla: si no hay presupuesto cargado, se muestra
+  // igual el valor de mercado (comportamiento histórico de esta tarjeta).
+  const patrimonio = hayDatos ? (capDisp!==null ? totalValor+capDisp : totalValor) : null;
+  // Patrimonio COMPLETO para el historial mensual: acá sí exigimos que el
+  // capital disponible esté cargado (presupuesto>0), porque el pedido fue
+  // "todo el capital, DCA + Bots + capital disponible" — sin presupuesto,
+  // el capital disponible es desconocido, no cero, así que no se puede
+  // afirmar "todo el capital" y ese mes no se captura automáticamente.
+  const patrimonioCompleto = (hayDatos && capDisp!==null) ? totalValor+capDisp : null;
+
+  return { capitalDCA, valorDCA, capitalRecupDCA, gpRealizadoDCA, tienePrecios,
+    capitalBots, valorBots, gpBotsCerr, totalInv, totalValor, totalGP, totalGPpct,
+    pres, totalAp, totalRet, capDisp, hayDatos, patrimonio, patrimonioCompleto };
+}
+
+/* ── Historial mensual del patrimonio (foto automática) ──
+   Se captura sola cada vez que se actualizan precios (o se entra a Hodler),
+   siempre que haya datos suficientes y que el mes no haya sido corregido a
+   mano — así una corrección manual no se pisa con la próxima actualización
+   automática. */
+let _hodlFotoChart = null;
+let _hodlFotoChartYear = new Date().getFullYear();
+
+function hodlFotoKey(m,y){ return `${y}-${String(m).padStart(2,'0')}`; }
+
+function hodlCapturarFotoMes(){
+  const { patrimonioCompleto } = hodlCalcPatrimonioTotal();
+  if (patrimonioCompleto==null) return; // sin presupuesto cargado: no hay "todo el capital" confiable para guardar
+  const now = new Date();
+  const key = hodlFotoKey(now.getMonth()+1, now.getFullYear());
+  if (!HS().fotos) HS().fotos = {};
+  const existing = HS().fotos[key];
+  if (!existing || !existing.manual) {
+    HS().fotos[key] = { patrimonio: patrimonioCompleto, manual:false };
+    hodlSave();
+  }
+}
+
+function hodlChangeFotoYear(dir){
+  _hodlFotoChartYear += dir;
+  hodlRenderFotoChart();
+}
+
+function hodlPopulateFotoSelects(){
+  const monthSel = document.getElementById('hodl-foto-month');
+  if (monthSel) { monthSel.innerHTML = PORT_MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join(''); monthSel.value = PORT_NOW_M; }
+  const yearInput = document.getElementById('hodl-foto-year');
+  if (yearInput) yearInput.value = PORT_NOW_Y;
+}
+
+function hodlSaveFotoManual(){
+  const m = parseInt(document.getElementById('hodl-foto-month').value);
+  const y = parseInt(document.getElementById('hodl-foto-year').value);
+  const monto = parseFloat(document.getElementById('hodl-foto-monto').value);
+  if (isNaN(m)||isNaN(y)||isNaN(monto)) { showToast('Completá mes, año y monto','err'); return; }
+  if (!HS().fotos) HS().fotos = {};
+  HS().fotos[hodlFotoKey(m,y)] = { patrimonio: monto, manual:true };
+  hodlSave();
+  document.getElementById('hodl-foto-monto').value = '';
+  showToast('✓ Mes corregido a mano','ok');
+  if (y !== _hodlFotoChartYear) _hodlFotoChartYear = y;
+  hodlRenderFotoChart();
+}
+
+function hodlRenderFotoChart(){
+  const yearLabel = document.getElementById('hodl-foto-chart-year-label');
+  if (yearLabel) yearLabel.textContent = _hodlFotoChartYear;
+  const ctx = document.getElementById('hodl-foto-chart')?.getContext('2d');
+  if (!ctx) return;
+  const fotos = HS().fotos || {};
+  const months = [];
+  for (let m=1; m<=12; m++){
+    const f = fotos[hodlFotoKey(m,_hodlFotoChartYear)];
+    months.push({ m, label: PORT_MONTHS[m-1], valor: f ? f.patrimonio : null, manual: !!f?.manual });
+  }
+  if (_hodlFotoChart) _hodlFotoChart.destroy();
+  _hodlFotoChart = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: months.map(mm=>mm.label),
+      datasets:[{
+        label:'Patrimonio total',
+        data: months.map(mm=>mm.valor),
+        spanGaps: true, // conecta saltando meses sin dato, sin pasar por $0
+        borderColor:'#f0b429', backgroundColor:'#f0b42922',
+        fill:true, tension:.35,
+        pointRadius: c => c.raw==null ? 0 : 3,
+        pointBackgroundColor: months.map(mm=> mm.manual ? '#a78bfa' : '#f0b429'),
+        borderWidth:2,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{
+        backgroundColor:'#191c26', borderColor:'#252936', borderWidth:1, titleColor:'#e8eaf2', bodyColor:'#f0b429',
+        callbacks:{ label: c => {
+          const mm = months[c.dataIndex];
+          if (mm.valor==null) return 'Sin dato';
+          return `${hodlFmtN(mm.valor,2)} USDT${mm.manual?' (corregido a mano)':''}`;
+        }}
+      }},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:10}}},
+        y:{grid:{color:'#252936'},ticks:{color:'#5a6080',font:{size:10},callback:v=>hodlFmtN(v,0)}}
+      }
+    }
+  });
+}
+
+function hodlRenderResumen() {
+  hodlCapturarFotoMes();
+  const {
+    capitalDCA, capitalBots, gpBotsCerr, totalInv, totalValor, totalGP, totalGPpct,
+    tienePrecios, pres, totalAp, totalRet, capDisp, hayDatos, patrimonio,
+  } = hodlCalcPatrimonioTotal();
+  const gpColor = totalGP>=0?'var(--ok)':'var(--danger)';
+  const gpSign  = totalGP>=0?'+':'';
 
   // KPIs
   const kpis = [
     {label:'Total invertido', val:hodlFmtN(totalInv,2), sub:`DCA: ${hodlFmtN(capitalDCA,2)} · Bots: ${hodlFmtN(capitalBots,2)}`},
-    {label:'Valor actual',    val:tienePrecios||capitalBots>0?hodlFmtN(totalValor,2):'—', sub:''},
-    {label:'G / P total',     val:tienePrecios||capitalBots>0?(gpSign+hodlFmtN(totalGP,2)):'—', color:gpColor, sub:tienePrecios||capitalBots>0?gpSign+totalGPpct.toFixed(2)+'%':''},
-    {label:'Rendimiento',     val:tienePrecios||capitalBots>0?gpSign+totalGPpct.toFixed(2)+'%':'—', color:gpColor, sub:''},
+    {label:'Valor actual',    val:hayDatos?hodlFmtN(totalValor,2):'—', sub:''},
+    {label:'G / P total',     val:hayDatos?(gpSign+hodlFmtN(totalGP,2)):'—', color:gpColor, sub:hayDatos?gpSign+totalGPpct.toFixed(2)+'%':''},
+    {label:'Rendimiento',     val:hayDatos?gpSign+totalGPpct.toFixed(2)+'%':'—', color:gpColor, sub:''},
   ];
   const kpisEl = document.getElementById('hodl-kpis');
   if (kpisEl) kpisEl.innerHTML = kpis.map(k=>`
@@ -4362,17 +4629,10 @@ function hodlRenderResumen() {
     </div>`).join('');
 
   // Patrimonio + capital disponible
-  const pres = HS().presupuesto || 0;
-  const totalAp = (HS().aportes||[]).reduce((s,a)=>s+a.monto,0);
-  const totalRet= (HS().retiradas||[]).reduce((s,r)=>s+r.monto,0);
-  const capitalNetoDCA = capitalDCA - capitalRecupDCA;
-  const capDisp = pres>0 ? pres+totalAp-totalRet-capitalNetoDCA-capitalBots+gpBotsCerr : null;
-
   const patrEl = document.getElementById('hodl-patrimonio');
   const patrSub= document.getElementById('hodl-patrimonio-sub');
   if (patrEl) {
-    if (tienePrecios||capitalBots>0) {
-      const patrimonio = capDisp!==null ? totalValor+capDisp : totalValor;
+    if (hayDatos) {
       patrEl.textContent = hodlFmtN(patrimonio,2)+' USDT';
       if (patrSub) patrSub.textContent = `Mercado: ${hodlFmtN(totalValor,2)} · Disp: ${capDisp!==null?hodlFmtN(capDisp,2):'s/presupuesto'}`;
     } else { patrEl.textContent='—'; if(patrSub) patrSub.textContent='Actualizá precios para ver'; }
@@ -4387,6 +4647,7 @@ function hodlRenderResumen() {
 
   hodlRenderAportes();
   hodlRenderRetiradas();
+  hodlRenderFotoChart();
 }
 
 /* ── Presupuesto ── */
@@ -4608,6 +4869,7 @@ function onhodlerEnter() {
 document.getElementById('hodl-fecha').value    = new Date().toISOString().split('T')[0];
 document.getElementById('hodl-bot-fecha').value= new Date().toISOString().split('T')[0];
 if (HS().presupuesto) document.getElementById('hodl-presupuesto').value = HS().presupuesto;
+hodlPopulateFotoSelects();
 hodlRenderResumen();
 
 /* ═══════════════════════════════════════════════════════════
