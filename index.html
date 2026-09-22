@@ -1362,6 +1362,7 @@
   <div class="macro-subnav">
     <button class="hodl-tab macro-tab active" data-tab="hdca"  onclick="hodlTab('hdca',this)">DCA</button>
     <button class="hodl-tab macro-tab"        data-tab="hbots" onclick="hodlTab('hbots',this)">Bots</button>
+    <button class="hodl-tab macro-tab"        data-tab="hcorto" onclick="hodlTab('hcorto',this)">Corto plazo</button>
   </div>
 
   <div class="content">
@@ -1481,6 +1482,42 @@
         <p style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:14px 0 8px">Historial de bots cerrados</p>
         <div id="hodl-bots-cerrados-list"></div>
       </div>
+    </div>
+
+    <!-- TAB CORTO PLAZO -->
+    <div id="hodl-hcorto" class="hodl-panel">
+      <div class="card" style="margin-bottom:14px">
+        <p style="font-size:13px;font-weight:700;margin-bottom:6px">Nueva operación de corto plazo</p>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:14px">A diferencia del DCA, acá se define de entrada a qué precio cortar la pérdida (stop-loss) y a qué precio tomar la ganancia (objetivo).</p>
+        <div class="grid-2" style="gap:10px;margin-bottom:10px">
+          <div class="form-group" style="margin:0"><label>Activo</label><input type="text" id="hodl-corto-activo" class="input" placeholder="BTC, ETH, SOL"></div>
+          <div class="form-group" style="margin:0"><label>Monto invertido</label><input type="number" id="hodl-corto-monto" class="input" placeholder="100" oninput="hodlPreviewCorto()"></div>
+          <div class="form-group" style="margin:0"><label>Precio de entrada</label><input type="number" id="hodl-corto-entrada" class="input" placeholder="65000" oninput="hodlPreviewCorto()"></div>
+          <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="hodl-corto-fecha" class="input"></div>
+          <div class="form-group" style="margin:0"><label>Stop-loss</label><input type="number" id="hodl-corto-stop" class="input" placeholder="62000" oninput="hodlPreviewCorto()"></div>
+          <div class="form-group" style="margin:0"><label>Objetivo</label><input type="number" id="hodl-corto-objetivo" class="input" placeholder="72000" oninput="hodlPreviewCorto()"></div>
+        </div>
+        <div id="hodl-corto-preview" style="font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px;font-family:var(--mono);line-height:1.8">Completá entrada, stop-loss y objetivo para ver el ratio riesgo-beneficio.</div>
+        <button class="btn btn-primary btn-sm btn-full" onclick="hodlAgregarCorto()">+ Abrir operación</button>
+      </div>
+      <div id="hodl-corto-container">
+        <div class="empty"><div class="empty-icon">⚡</div><p>Abrí tu primera operación de corto plazo para comenzar.</p></div>
+      </div>
+      <div id="hodl-corto-cerradas-wrap" style="display:none">
+        <p style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:14px 0 8px">Historial de operaciones cerradas</p>
+        <div id="hodl-corto-cerradas-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal cerrar operación de corto plazo -->
+  <div class="modal-overlay" id="hodl-modal-cerrar-corto" onclick="handleOverlayClick(event,'hodl-modal-cerrar-corto')">
+    <div class="modal-box">
+      <div class="modal-header"><span class="modal-title">Cerrar operación</span><button class="modal-close" onclick="closeModal('hodl-modal-cerrar-corto')">✕</button></div>
+      <div class="form-group"><label>Precio de cierre</label><input type="number" id="hodl-corto-cierre-precio" class="input" placeholder="68000" oninput="hodlPreviewCerrarCorto()"></div>
+      <div class="form-group"><label>Fecha de cierre</label><input type="date" id="hodl-corto-cierre-fecha" class="input"></div>
+      <div id="hodl-corto-cierre-preview" style="font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px;font-family:var(--mono);line-height:1.8">Completá el precio de cierre para ver el resultado.</div>
+      <button class="btn btn-ok btn-full" onclick="hodlConfirmarCerrarCorto()">Confirmar cierre</button>
     </div>
   </div>
 
@@ -2051,6 +2088,8 @@ function buildDefaultState() {
       activos: {},
       bots: [],
       botsCerrados: [],
+      cortoPlazo: [],         // operaciones de corto plazo abiertas, con stop-loss y objetivo
+      cortoPlazoCerradas: [], // historial de operaciones de corto plazo ya cerradas
       presupuesto: 0,
       aportes: [],
       retiradas: [],
@@ -4010,7 +4049,11 @@ let _hodlEditBotField = null;
 const HS = () => STATE.hodler;
 const hodlSave = () => saveState();
 function hodlFmtN(n, dec) {
-  return n.toLocaleString('es-AR', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+  // Evita mostrar "-0,00" cuando un negativo minúsculo de punto flotante
+  // (ej. al vender exactamente lo que se compró) redondea a cero.
+  let v = n;
+  if (Number(v.toFixed(dec)) === 0) v = 0;
+  return v.toLocaleString('es-AR', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
 
 /* ── Sub-nav DCA / Bots ── */
@@ -4028,8 +4071,9 @@ function hodlGetCoinId(sym) {
 // Solo pide precios de: activos del usuario + barra fija (máximo ~10 IDs para no saturar la API)
 function hodlGetSymbolsToFetch() {
   const fromPortfolio = Object.keys(HS().activos || {}).map(s => s.toUpperCase());
+  const fromCorto = (HS().cortoPlazo || []).map(o => o.activo.toUpperCase());
   const fixed = Object.keys(HODL_COIN_IDS);
-  return [...new Set([...fromPortfolio, ...fixed])].slice(0, 15);
+  return [...new Set([...fromPortfolio, ...fromCorto, ...fixed])].slice(0, 15);
 }
 
 async function hodlFetchPrices() {
@@ -4167,6 +4211,42 @@ function hodlPrecioObjetivo(promedio, obj, comPct) {
   return f > 0 ? promedio * (1 + obj/100) / f : Infinity;
 }
 
+/* ── Validación antes de borrar una compra ──
+   Borrar una compra puede dejar una venta posterior "sin respaldo": el motor
+   de costo promedio la procesaría como si no hubiera nada comprado todavía,
+   inflando su ganancia hasta casi el 100% del monto vendido. Estas dos
+   funciones detectan ese riesgo antes de que ocurra. */
+
+// Recorre la línea de tiempo SIN la compra indicada y verifica que ninguna
+// venta se quede intentando vender más cantidad de la disponible hasta ese momento.
+function hodlSimularEliminarCompra(data, idxAEliminar) {
+  const compras = (data.compras || []).filter((_, i) => i !== idxAEliminar);
+  const ventas  = data.ventas || [];
+  const eventos = [
+    ...compras.map(c => ({ tipo:'compra', fecha:c.fecha||'', ref:c })),
+    ...ventas.map(v  => ({ tipo:'venta',  fecha:v.fecha||'',  ref:v })),
+  ].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+  let qty = 0;
+  const EPS = 1e-8;
+  for (const ev of eventos) {
+    if (ev.tipo === 'compra') qty += ev.ref.cantidad;
+    else {
+      if (ev.ref.cantidad > qty + EPS) return { ok:false }; // esa venta quedaría sin respaldo
+      qty -= ev.ref.cantidad;
+    }
+  }
+  return { ok:true };
+}
+
+// Ventas que, sin bloquear el borrado, van a recalcular su ganancia porque
+// ocurrieron en la misma fecha o después de la compra que se va a eliminar.
+function hodlVentasAfectadasPorCompra(data, idx) {
+  const compra = (data.compras || [])[idx];
+  if (!compra) return [];
+  return (data.ventas || []).filter(v => (v.fecha||'') >= (compra.fecha||''));
+}
+
 /* ── Render activos DCA ── */
 function hodlRenderActivos() {
   const cont = document.getElementById('hodl-activos-container');
@@ -4273,7 +4353,11 @@ function hodlRenderActivo(nombre) {
       <button class="btn btn-outline btn-sm" style="border-color:var(--danger);color:var(--danger)" onclick="hodlPedirEliminarActivo('${nombre}')">Eliminar</button>
     </div>
     <div class="hodl-stats">
-      <div class="hodl-stat"><div class="hodl-stat-label">Capital</div><div class="hodl-stat-val">${hodlFmtN(res.capitalInvertido,2)}</div></div>
+      <div class="hodl-stat">
+        <div class="hodl-stat-label">Capital invertido (histórico)</div>
+        <div class="hodl-stat-val">${hodlFmtN(res.capitalInvertido,2)}</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:3px">En cartera hoy: ${hodlFmtN(res.promedio*res.cantidadActual,2)}</div>
+      </div>
       <div class="hodl-stat"><div class="hodl-stat-label">Cantidad</div><div class="hodl-stat-val">${hodlFmtN(res.cantidadActual,6)}</div></div>
       <div class="hodl-stat"><div class="hodl-stat-label">P. promedio</div><div class="hodl-stat-val" style="color:var(--hodl)">${hodlFmtN(res.promedio,2)}</div></div>
       <div class="hodl-stat"><div class="hodl-stat-label">P. objetivo</div><div class="hodl-stat-val" style="color:var(--info)">${hodlFmtN(precioObj,2)}</div></div>
@@ -4437,16 +4521,37 @@ function hodlConfirmar(icon, title, desc, fn) {
   openModal('hodl-modal-confirm');
 }
 function hodlPedirEliminarOrden(nombre, idx) {
-  hodlConfirmar('🗑️',`¿Eliminar orden #${idx+1} de ${nombre}?`,'Esta acción no se puede deshacer.',()=>{
-    (HS().activos||{})[nombre]?.compras?.splice(idx,1);
-    if(!(HS().activos[nombre]?.compras?.length)) delete HS().activos[nombre];
+  const data = (HS().activos||{})[nombre];
+  if (!data) return;
+
+  const sim = hodlSimularEliminarCompra(data, idx);
+  if (!sim.ok) {
+    showToast('No se puede eliminar: una venta quedaría sin compra que la respalde. Eliminá primero esa venta.', 'err');
+    return;
+  }
+
+  const afectadas = hodlVentasAfectadasPorCompra(data, idx);
+  const desc = afectadas.length
+    ? `Hay ${afectadas.length} venta${afectadas.length!==1?'s':''} posterior${afectadas.length!==1?'es':''} a esta compra — su ganancia ya calculada se va a recalcular. Esta acción no se puede deshacer.`
+    : 'Esta acción no se puede deshacer.';
+
+  hodlConfirmar('🗑️',`¿Eliminar orden #${idx+1} de ${nombre}?`, desc, ()=>{
+    data.compras.splice(idx,1);
+    // El activo solo desaparece si no quedan compras NI ventas — antes se
+    // borraba con solo vaciar las compras, arrastrándose el historial de
+    // ventas y la ganancia ya realizada de un activo completamente vendido.
+    if (!data.compras.length && !(data.ventas||[]).length) delete HS().activos[nombre];
     hodlSave(); hodlRenderActivos(); hodlRenderResumen();
     showToast('Orden eliminada','ok');
   });
 }
 function hodlPedirEliminarVenta(nombre, idx) {
   hodlConfirmar('🗑️',`¿Eliminar venta #${idx+1} de ${nombre}?`,'Esta acción no se puede deshacer.',()=>{
-    (HS().activos||{})[nombre]?.ventas?.splice(idx,1);
+    const data = (HS().activos||{})[nombre];
+    data?.ventas?.splice(idx,1);
+    // Misma regla que al borrar una compra: el activo solo desaparece si no
+    // queda ni compras ni ventas.
+    if (data && !(data.compras||[]).length && !(data.ventas||[]).length) delete HS().activos[nombre];
     hodlSave(); hodlRenderActivos(); hodlRenderResumen();
     showToast('Venta eliminada','ok');
   });
@@ -4482,19 +4587,35 @@ function hodlCalcPatrimonioTotal() {
   const capitalBots = bots.reduce((s,b)=>s+b.capital,0);
   const valorBots   = bots.reduce((s,b)=>s+b.capital+b.ganancia,0);
   const gpBotsCerr  = botsCerrados.reduce((s,b)=>s+b.ganancia,0);
-  const totalInv    = capitalDCA + capitalBots;
-  const totalValor  = valorDCA + valorBots;
+
+  // Corto plazo: mismo patrón que Bots — el capital de las operaciones
+  // ABIERTAS se resta del disponible; al cerrarse una, deja de restarse
+  // (sale de la lista) y su resultado real (ganancia o pérdida) se suma aparte.
+  const cortoAbiertas = HS().cortoPlazo || [];
+  const cortoCerradas = HS().cortoPlazoCerradas || [];
+  let capitalCorto=0, valorCorto=0, tienePreciosCorto=false;
+  cortoAbiertas.forEach(op => {
+    capitalCorto += op.monto;
+    const cache = _hodlPrices[op.activo];
+    if (cache) { valorCorto += op.cantidad*cache.precio; tienePreciosCorto=true; }
+    else valorCorto += op.cantidad*op.entrada; // sin precio en vivo: se valúa al precio de entrada (ni ganancia ni pérdida todavía)
+  });
+  const gpCortoCerr = cortoCerradas.reduce((s,o)=>s+o.resultado,0);
+
+  const totalInv    = capitalDCA + capitalBots + capitalCorto;
+  const totalValor  = valorDCA + valorBots + valorCorto;
   const costoAbiertoDCA = capitalDCA - (capitalRecupDCA - gpRealizadoDCA);
-  const totalGP     = (valorDCA - costoAbiertoDCA) + gpRealizadoDCA + (valorBots - capitalBots) + gpBotsCerr;
+  const totalGP     = (valorDCA - costoAbiertoDCA) + gpRealizadoDCA + (valorBots - capitalBots) + gpBotsCerr
+                     + (valorCorto - capitalCorto) + gpCortoCerr;
   const totalGPpct  = totalInv>0?(totalGP/totalInv*100):0;
 
   const pres = HS().presupuesto || 0;
   const totalAp = (HS().aportes||[]).reduce((s,a)=>s+a.monto,0);
   const totalRet= (HS().retiradas||[]).reduce((s,r)=>s+r.monto,0);
   const capitalNetoDCA = capitalDCA - capitalRecupDCA;
-  const capDisp = pres>0 ? pres+totalAp-totalRet-capitalNetoDCA-capitalBots+gpBotsCerr : null;
+  const capDisp = pres>0 ? pres+totalAp-totalRet-capitalNetoDCA-capitalBots+gpBotsCerr-capitalCorto+gpCortoCerr : null;
 
-  const hayDatos = tienePrecios || capitalBots>0;
+  const hayDatos = tienePrecios || capitalBots>0 || cortoAbiertas.length>0 || cortoCerradas.length>0;
   // Patrimonio MOSTRADO en pantalla: si no hay presupuesto cargado, se muestra
   // igual el valor de mercado (comportamiento histórico de esta tarjeta).
   const patrimonio = hayDatos ? (capDisp!==null ? totalValor+capDisp : totalValor) : null;
@@ -4506,7 +4627,8 @@ function hodlCalcPatrimonioTotal() {
   const patrimonioCompleto = (hayDatos && capDisp!==null) ? totalValor+capDisp : null;
 
   return { capitalDCA, valorDCA, capitalRecupDCA, gpRealizadoDCA, tienePrecios,
-    capitalBots, valorBots, gpBotsCerr, totalInv, totalValor, totalGP, totalGPpct,
+    capitalBots, valorBots, gpBotsCerr, capitalCorto, valorCorto, gpCortoCerr,
+    totalInv, totalValor, totalGP, totalGPpct,
     pres, totalAp, totalRet, capDisp, hayDatos, patrimonio, patrimonioCompleto };
 }
 
@@ -4607,7 +4729,7 @@ function hodlRenderFotoChart(){
 function hodlRenderResumen() {
   hodlCapturarFotoMes();
   const {
-    capitalDCA, capitalBots, gpBotsCerr, totalInv, totalValor, totalGP, totalGPpct,
+    capitalDCA, capitalBots, capitalCorto, gpBotsCerr, totalInv, totalValor, totalGP, totalGPpct,
     tienePrecios, pres, totalAp, totalRet, capDisp, hayDatos, patrimonio,
   } = hodlCalcPatrimonioTotal();
   const gpColor = totalGP>=0?'var(--ok)':'var(--danger)';
@@ -4615,7 +4737,7 @@ function hodlRenderResumen() {
 
   // KPIs
   const kpis = [
-    {label:'Total invertido', val:hodlFmtN(totalInv,2), sub:`DCA: ${hodlFmtN(capitalDCA,2)} · Bots: ${hodlFmtN(capitalBots,2)}`},
+    {label:'Total invertido', val:hodlFmtN(totalInv,2), sub:`DCA: ${hodlFmtN(capitalDCA,2)} · Bots: ${hodlFmtN(capitalBots,2)} · Corto: ${hodlFmtN(capitalCorto,2)}`},
     {label:'Valor actual',    val:hayDatos?hodlFmtN(totalValor,2):'—', sub:''},
     {label:'G / P total',     val:hayDatos?(gpSign+hodlFmtN(totalGP,2)):'—', color:gpColor, sub:hayDatos?gpSign+totalGPpct.toFixed(2)+'%':''},
     {label:'Rendimiento',     val:hayDatos?gpSign+totalGPpct.toFixed(2)+'%':'—', color:gpColor, sub:''},
@@ -4648,6 +4770,7 @@ function hodlRenderResumen() {
   hodlRenderAportes();
   hodlRenderRetiradas();
   hodlRenderFotoChart();
+  hodlRenderCorto();
 }
 
 /* ── Presupuesto ── */
@@ -4856,11 +4979,216 @@ function hodlEliminarBotCerrado(i) {
   showToast('Bot eliminado del historial','ok');
 }
 
+/* ═══════════════════════════════════════════════════════════
+   CORTO PLAZO — operaciones con stop-loss y objetivo
+   A diferencia del DCA (que sugiere comprar más si baja) y de los Bots
+   (automatizados), acá se opera una posición puntual: se define de entrada
+   a qué precio cortar la pérdida y a qué precio tomar la ganancia, y se mide
+   el ratio riesgo-beneficio de esa relación antes de siquiera entrar.
+═══════════════════════════════════════════════════════════ */
+
+// Solo contempla posiciones largas (comprar y esperar que suba), como el
+// resto de Hodler — por eso exige stop-loss por debajo de la entrada y
+// objetivo por arriba.
+function hodlCalcRiesgoBeneficio(entrada, stop, objetivo) {
+  const riesgoPct     = entrada>0 ? ((entrada - stop)/entrada)*100 : 0;
+  const beneficioPct  = entrada>0 ? ((objetivo - entrada)/entrada)*100 : 0;
+  const ratio         = riesgoPct>0 ? beneficioPct/riesgoPct : null;
+  return { riesgoPct, beneficioPct, ratio };
+}
+
+function hodlSemaforoRatio(ratio) {
+  if (ratio==null) return { emoji:'⚪', color:'var(--muted)', label:'Datos incompletos' };
+  if (ratio>=2)     return { emoji:'🟢', color:'var(--ok)',    label:'Favorable' };
+  if (ratio>=1)     return { emoji:'🟡', color:'var(--warn)',  label:'Ajustado' };
+  return                   { emoji:'🔴', color:'var(--danger)',label:'Arriesgás más de lo que podés ganar' };
+}
+
+function hodlPreviewCorto() {
+  const entrada  = parseFloat(document.getElementById('hodl-corto-entrada')?.value);
+  const stop     = parseFloat(document.getElementById('hodl-corto-stop')?.value);
+  const objetivo = parseFloat(document.getElementById('hodl-corto-objetivo')?.value);
+  const monto    = parseFloat(document.getElementById('hodl-corto-monto')?.value);
+  const prev = document.getElementById('hodl-corto-preview');
+  if (!prev) return;
+  if (isNaN(entrada)||isNaN(stop)||isNaN(objetivo)||entrada<=0) { prev.textContent='Completá entrada, stop-loss y objetivo para ver el ratio riesgo-beneficio.'; return; }
+  if (stop>=entrada) { prev.innerHTML='<span style="color:var(--danger)">⚠ El stop-loss tiene que ser menor al precio de entrada.</span>'; return; }
+  if (objetivo<=entrada) { prev.innerHTML='<span style="color:var(--danger)">⚠ El objetivo tiene que ser mayor al precio de entrada.</span>'; return; }
+  const { riesgoPct, beneficioPct, ratio } = hodlCalcRiesgoBeneficio(entrada, stop, objetivo);
+  const { emoji, color, label } = hodlSemaforoRatio(ratio);
+  const montoValido = !isNaN(monto) && monto>0;
+  const riesgoUSDT = montoValido ? monto*(riesgoPct/100) : null;
+  const beneficioUSDT = montoValido ? monto*(beneficioPct/100) : null;
+  prev.innerHTML = `Riesgo: <span style="color:var(--danger)">-${riesgoPct.toFixed(2)}%${riesgoUSDT!=null?' ('+hodlFmtN(riesgoUSDT,2)+' USDT)':''}</span><br>`
+    + `Beneficio: <span style="color:var(--ok)">+${beneficioPct.toFixed(2)}%${beneficioUSDT!=null?' ('+hodlFmtN(beneficioUSDT,2)+' USDT)':''}</span><br>`
+    + `<span style="color:${color};font-weight:700">Ratio riesgo-beneficio: ${ratio.toFixed(2)}:1 ${emoji} (${label})</span>`;
+}
+
+function hodlAgregarCorto() {
+  const activo   = document.getElementById('hodl-corto-activo').value.trim().toUpperCase();
+  const monto    = parseFloat(document.getElementById('hodl-corto-monto').value);
+  const entrada  = parseFloat(document.getElementById('hodl-corto-entrada').value);
+  const stop     = parseFloat(document.getElementById('hodl-corto-stop').value);
+  const objetivo = parseFloat(document.getElementById('hodl-corto-objetivo').value);
+  const fecha    = document.getElementById('hodl-corto-fecha').value || new Date().toISOString().split('T')[0];
+  if (!activo) { showToast('Ingresá el activo','err'); return; }
+  if (isNaN(monto)||monto<=0) { showToast('Monto inválido','err'); return; }
+  if (isNaN(entrada)||entrada<=0) { showToast('Precio de entrada inválido','err'); return; }
+  if (isNaN(stop)||stop<=0||stop>=entrada) { showToast('El stop-loss tiene que ser mayor a 0 y menor a la entrada','err'); return; }
+  if (isNaN(objetivo)||objetivo<=entrada) { showToast('El objetivo tiene que ser mayor a la entrada','err'); return; }
+  if (!HS().cortoPlazo) HS().cortoPlazo = [];
+  const id = HS().cortoPlazo.length ? Math.max(...HS().cortoPlazo.map(o=>o.id))+1 : 1;
+  HS().cortoPlazo.push({ id, activo, monto, entrada, stop, objetivo, fecha, cantidad: monto/entrada });
+  hodlSave();
+  hodlRenderCorto();
+  hodlRenderResumen();
+  document.getElementById('hodl-corto-activo').value = '';
+  document.getElementById('hodl-corto-monto').value = '';
+  document.getElementById('hodl-corto-entrada').value = '';
+  document.getElementById('hodl-corto-stop').value = '';
+  document.getElementById('hodl-corto-objetivo').value = '';
+  document.getElementById('hodl-corto-preview').textContent = 'Completá entrada, stop-loss y objetivo para ver el ratio riesgo-beneficio.';
+  showToast(`✓ Operación de ${activo} abierta`,'ok');
+}
+
+function hodlRenderCorto() {
+  const cont = document.getElementById('hodl-corto-container');
+  if (!cont) return;
+  const abiertas = HS().cortoPlazo || [];
+  if (!abiertas.length) {
+    cont.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><p>Abrí tu primera operación de corto plazo para comenzar.</p></div>';
+  } else {
+    cont.innerHTML = abiertas.map((op, i) => {
+      const { riesgoPct, beneficioPct, ratio } = hodlCalcRiesgoBeneficio(op.entrada, op.stop, op.objetivo);
+      const { emoji, color } = hodlSemaforoRatio(ratio);
+      const cache = _hodlPrices[op.activo];
+      let gpHTML = '<span style="color:var(--muted)">Sin precio — actualizá</span>';
+      if (cache) {
+        const valorActual = op.cantidad*cache.precio;
+        const gp = valorActual - op.monto;
+        const gpPct = op.monto>0 ? (gp/op.monto)*100 : 0;
+        const gpColor = gp>=0 ? 'var(--ok)' : 'var(--danger)';
+        const gpSign  = gp>=0 ? '+' : '';
+        gpHTML = `<span style="color:${gpColor};font-weight:700">${gpSign}${hodlFmtN(gp,2)} USDT (${gpSign}${gpPct.toFixed(2)}%)</span>`;
+      }
+      return `<div class="hodl-bot-card">
+        <div class="hodl-bot-header">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="hodl-chip">${op.activo}</span>
+            <span style="font-size:12px;color:var(--muted)">${op.fecha||'—'}</span>
+          </div>
+          <button class="btn btn-sm" style="background:#3b1219;color:var(--danger)" onclick="hodlPedirEliminarCorto(${i})">✕</button>
+        </div>
+        <div class="hodl-bot-stats">
+          <div class="hodl-bot-stat"><div class="hodl-stat-label">Entrada</div><div class="hodl-stat-val" style="font-family:var(--mono);font-size:13px">${hodlFmtN(op.entrada,2)}</div></div>
+          <div class="hodl-bot-stat"><div class="hodl-stat-label">Stop-loss</div><div class="hodl-stat-val" style="font-family:var(--mono);font-size:13px;color:var(--danger)">${hodlFmtN(op.stop,2)}</div></div>
+          <div class="hodl-bot-stat"><div class="hodl-stat-label">Objetivo</div><div class="hodl-stat-val" style="font-family:var(--mono);font-size:13px;color:var(--ok)">${hodlFmtN(op.objetivo,2)}</div></div>
+          <div class="hodl-bot-stat"><div class="hodl-stat-label">Ratio R:B</div><div class="hodl-stat-val" style="font-family:var(--mono);font-size:13px;color:${color}">${ratio!=null?ratio.toFixed(2)+':1':'—'} ${emoji}</div></div>
+        </div>
+        <div style="padding:8px 14px;font-size:11px;color:var(--muted);font-family:var(--mono);border-bottom:1px solid var(--border)">
+          Monto: ${hodlFmtN(op.monto,2)} USDT · Cantidad: ${hodlFmtN(op.cantidad,6)}
+        </div>
+        <div class="hodl-inline-row">
+          <span style="font-size:11px;color:var(--muted)">Precio actual:</span>
+          <span style="font-family:var(--mono);font-size:13px;font-weight:700">${cache?'$'+hodlFmtN(cache.precio,2):'—'}</span>
+          <span style="font-size:11px;color:var(--muted);margin-left:8px">G/P no realizado:</span>
+          <span style="font-family:var(--mono);font-size:12px">${gpHTML}</span>
+        </div>
+        <div style="padding:10px 14px">
+          <button class="btn btn-outline btn-sm btn-full" style="border-color:var(--info);color:var(--info)" onclick="hodlAbrirCerrarCorto(${i})">✓ Cerrar operación</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  hodlRenderCortoCerradas();
+}
+
+function hodlRenderCortoCerradas() {
+  const wrap = document.getElementById('hodl-corto-cerradas-wrap');
+  const lista = document.getElementById('hodl-corto-cerradas-list');
+  const cerradas = HS().cortoPlazoCerradas || [];
+  if (!wrap||!lista) return;
+  wrap.style.display = cerradas.length?'block':'none';
+  lista.innerHTML = [...cerradas].reverse().map((op) => {
+    const { ratio } = hodlCalcRiesgoBeneficio(op.entrada, op.stop, op.objetivo);
+    const { emoji, color } = hodlSemaforoRatio(ratio);
+    const gpColor = op.resultado>=0 ? 'var(--ok)' : 'var(--danger)';
+    const gpSign  = op.resultado>=0 ? '+' : '';
+    const gpPct = op.monto>0 ? (op.resultado/op.monto)*100 : 0;
+    return `<div class="hodl-bot-card" style="opacity:.75;border-color:rgba(107,114,128,.4)">
+      <div class="hodl-bot-header">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="hodl-chip" style="background:var(--muted)">${op.activo}</span>
+          <span style="font-size:10px;font-family:var(--mono);background:var(--border);color:var(--muted);padding:2px 7px;border-radius:20px">CERRADA</span>
+        </div>
+        <button class="btn btn-sm" style="background:#3b1219;color:var(--danger);padding:4px 8px" onclick="hodlEliminarCortoCerrada(${cerradas.indexOf(op)})">✕</button>
+      </div>
+      <div class="hodl-bot-stats">
+        <div class="hodl-bot-stat"><div class="hodl-stat-label">Entrada → Cierre</div><div class="hodl-stat-val" style="font-family:var(--mono);font-size:12px">${hodlFmtN(op.entrada,2)} → ${hodlFmtN(op.cierrePrecio,2)}</div></div>
+        <div class="hodl-bot-stat"><div class="hodl-stat-label">Ratio planeado</div><div class="hodl-stat-val" style="font-family:var(--mono);font-size:13px;color:${color}">${ratio!=null?ratio.toFixed(2)+':1':'—'} ${emoji}</div></div>
+        <div class="hodl-bot-stat"><div class="hodl-stat-label">Resultado real</div><div class="hodl-stat-val" style="font-family:var(--mono);font-size:13px;color:${gpColor}">${gpSign}${hodlFmtN(op.resultado,2)}</div></div>
+        <div class="hodl-bot-stat"><div class="hodl-stat-label">% real</div><div class="hodl-stat-val" style="font-family:var(--mono);font-size:13px;color:${gpColor}">${gpSign}${gpPct.toFixed(2)}%</div></div>
+      </div>
+      <div style="padding:8px 14px;font-size:11px;color:var(--muted);font-family:var(--mono)">📅 ${op.fecha||'—'} → ${op.cierreFecha||'—'}</div>
+    </div>`;
+  }).join('');
+}
+
+function hodlPedirEliminarCorto(i) {
+  const op = (HS().cortoPlazo||[])[i];
+  if (!op) return;
+  hodlConfirmar('🗑️',`¿Eliminar operación de ${op.activo}?`,'Esta acción no se puede deshacer.',()=>{
+    HS().cortoPlazo.splice(i,1);
+    hodlSave(); hodlRenderCorto(); hodlRenderResumen();
+    showToast('Operación eliminada','ok');
+  });
+}
+
+let _hodlCortoCerrarIdx = null;
+function hodlAbrirCerrarCorto(i) {
+  _hodlCortoCerrarIdx = i;
+  document.getElementById('hodl-corto-cierre-precio').value = '';
+  document.getElementById('hodl-corto-cierre-fecha').value = new Date().toISOString().split('T')[0];
+  document.getElementById('hodl-corto-cierre-preview').textContent = 'Completá el precio de cierre para ver el resultado.';
+  openModal('hodl-modal-cerrar-corto');
+}
+function hodlPreviewCerrarCorto() {
+  const op = (HS().cortoPlazo||[])[_hodlCortoCerrarIdx];
+  const precio = parseFloat(document.getElementById('hodl-corto-cierre-precio')?.value);
+  const prev = document.getElementById('hodl-corto-cierre-preview');
+  if (!op || !prev) return;
+  if (isNaN(precio)||precio<=0) { prev.textContent = 'Completá el precio de cierre para ver el resultado.'; return; }
+  const resultado = op.cantidad*(precio-op.entrada);
+  const gpPct = op.monto>0 ? (resultado/op.monto)*100 : 0;
+  const color = resultado>=0?'var(--ok)':'var(--danger)';
+  const sign  = resultado>=0?'+':'';
+  prev.innerHTML = `Cantidad: ${hodlFmtN(op.cantidad,6)}<br>Recibís: ${hodlFmtN(op.cantidad*precio,2)} USDT<br><span style="color:${color};font-weight:700">Resultado: ${sign}${hodlFmtN(resultado,2)} USDT (${sign}${gpPct.toFixed(2)}%)</span>`;
+}
+function hodlConfirmarCerrarCorto() {
+  const op = (HS().cortoPlazo||[])[_hodlCortoCerrarIdx];
+  const precio = parseFloat(document.getElementById('hodl-corto-cierre-precio').value);
+  const fecha  = document.getElementById('hodl-corto-cierre-fecha').value || new Date().toISOString().split('T')[0];
+  if (!op) { closeModal('hodl-modal-cerrar-corto'); return; }
+  if (isNaN(precio)||precio<=0) { showToast('Precio de cierre inválido','err'); return; }
+  const resultado = op.cantidad*(precio-op.entrada);
+  if (!HS().cortoPlazoCerradas) HS().cortoPlazoCerradas = [];
+  HS().cortoPlazoCerradas.push({ ...op, cierrePrecio:precio, cierreFecha:fecha, resultado });
+  HS().cortoPlazo.splice(_hodlCortoCerrarIdx,1);
+  hodlSave(); closeModal('hodl-modal-cerrar-corto');
+  hodlRenderCorto(); hodlRenderResumen();
+  showToast('✓ Operación cerrada','ok');
+}
+function hodlEliminarCortoCerrada(i) {
+  (HS().cortoPlazoCerradas||[]).splice(i,1); hodlSave(); hodlRenderCortoCerradas(); hodlRenderResumen();
+  showToast('Eliminada del historial','ok');
+}
+
 /* ── Init ── */
 function onhodlerEnter() {
   hodlRenderActivos();
   hodlRenderBots();
   hodlRenderBotsCerrados();
+  hodlRenderCorto();
   hodlRenderResumen();
   hodlFetchPrices();
 }
@@ -4868,6 +5196,7 @@ function onhodlerEnter() {
 // Init fechas y presupuesto
 document.getElementById('hodl-fecha').value    = new Date().toISOString().split('T')[0];
 document.getElementById('hodl-bot-fecha').value= new Date().toISOString().split('T')[0];
+document.getElementById('hodl-corto-fecha').value= new Date().toISOString().split('T')[0];
 if (HS().presupuesto) document.getElementById('hodl-presupuesto').value = HS().presupuesto;
 hodlPopulateFotoSelects();
 hodlRenderResumen();
