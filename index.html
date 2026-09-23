@@ -1008,6 +1008,11 @@
           <!-- Rango rápido -->
           <div style="display:flex;gap:6px" id="macro-range-btns"></div>
         </div>
+        <!-- Rango personalizado -->
+        <div id="macro-range-custom" style="display:none;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+          <div class="form-group" style="margin:0;flex:1;min-width:120px"><label>Desde</label><input type="month" id="macro-range-desde" class="input" onchange="macroSetRangoPersonalizado()"></div>
+          <div class="form-group" style="margin:0;flex:1;min-width:120px"><label>Hasta</label><input type="month" id="macro-range-hasta" class="input" onchange="macroSetRangoPersonalizado()"></div>
+        </div>
         <!-- Selector de indicador -->
         <div style="margin-bottom:14px">
           <select id="macro-chart-select" class="input" onchange="macroSelectChart(this.value)"
@@ -1922,6 +1927,11 @@
           <p style="font-size:13px;font-weight:700">Evolución histórica</p>
           <div style="display:flex;gap:6px" id="micro-range-btns"></div>
         </div>
+        <!-- Rango personalizado -->
+        <div id="micro-range-custom" style="display:none;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+          <div class="form-group" style="margin:0;flex:1;min-width:120px"><label>Desde</label><input type="month" id="micro-range-desde" class="input" onchange="microSetRangoPersonalizado()"></div>
+          <div class="form-group" style="margin:0;flex:1;min-width:120px"><label>Hasta</label><input type="month" id="micro-range-hasta" class="input" onchange="microSetRangoPersonalizado()"></div>
+        </div>
         <div style="margin-bottom:14px">
           <select id="micro-chart-select" class="input" onchange="microSelectChart(this.value)"
             style="font-size:13px;border-color:var(--micro)">
@@ -2394,7 +2404,9 @@ const MACRO_RANGE_OPTS = [
   { id:'6m', label:'6M', months:6 },
   { id:'1a', label:'1A', months:12 },
   { id:'todo', label:'Todo', months:null },
+  { id:'custom', label:'📅', months:null },
 ];
+let _macroRangoDesde = null, _macroRangoHasta = null;
 
 let _macroActiveTab    = 'dashboard';
 let _macroActiveChart  = '__comp_usd';
@@ -2696,6 +2708,8 @@ function macroRenderRangeBtns() {
   document.getElementById('macro-range-btns').innerHTML = MACRO_RANGE_OPTS.map(r=>`
     <button class="macro-range-btn${_macroActiveRange===r.id?' active':''}"
       onclick="macroSelectRange('${r.id}')">${r.label}</button>`).join('');
+  const customWrap = document.getElementById('macro-range-custom');
+  if (customWrap) customWrap.style.display = _macroActiveRange==='custom' ? 'flex' : 'none';
 }
 
 function macroSelectRange(id) {
@@ -2704,9 +2718,22 @@ function macroSelectRange(id) {
   macroRenderChart();
 }
 
+function macroSetRangoPersonalizado() {
+  _macroRangoDesde = document.getElementById('macro-range-desde').value || null;
+  _macroRangoHasta = document.getElementById('macro-range-hasta').value || null;
+  macroRenderChart();
+}
+
 function macroFilterByRange(arr) {
   const opt = MACRO_RANGE_OPTS.find(r=>r.id===_macroActiveRange);
-  if (!opt||opt.months===null) return arr;
+  if (!opt) return arr;
+  if (opt.id === 'custom') {
+    // Mientras no se elija al menos una punta del rango, se muestra todo
+    // (evita que el gráfico se vea vacío apenas se toca el botón "📅").
+    if (!_macroRangoDesde && !_macroRangoHasta) return arr;
+    return arr.filter(e => (!_macroRangoDesde || e.fecha>=_macroRangoDesde) && (!_macroRangoHasta || e.fecha<=_macroRangoHasta));
+  }
+  if (opt.months===null) return arr;
   const sorted = macroSorted();
   if (!sorted.length) return arr;
   const last = sorted[sorted.length-1].fecha;
@@ -6315,7 +6342,9 @@ const MICRO_RANGE_OPTS = [
   { id:'6m', label:'6M', months:6 },
   { id:'1a', label:'1A', months:12 },
   { id:'todo', label:'Todo', months:null },
+  { id:'custom', label:'📅', months:null },
 ];
+let _microRangoDesde = null, _microRangoHasta = null;
 
 const MIS = () => STATE.micro;
 const microSave = () => saveState();
@@ -6628,15 +6657,28 @@ function microRenderRangeBtns(){
   document.getElementById('micro-range-btns').innerHTML=MICRO_RANGE_OPTS.map(r=>`
     <button class="micro-range-btn${_microActiveRange===r.id?' active':''}"
       onclick="microSelectRange('${r.id}')">${r.label}</button>`).join('');
+  const customWrap = document.getElementById('micro-range-custom');
+  if (customWrap) customWrap.style.display = _microActiveRange==='custom' ? 'flex' : 'none';
 }
 
 function microSelectRange(id){
   _microActiveRange=id; microRenderRangeBtns(); microRenderChart();
 }
 
+function microSetRangoPersonalizado() {
+  _microRangoDesde = document.getElementById('micro-range-desde').value || null;
+  _microRangoHasta = document.getElementById('micro-range-hasta').value || null;
+  microRenderChart();
+}
+
 function microFilterByRange(arr){
   const opt=MICRO_RANGE_OPTS.find(r=>r.id===_microActiveRange);
-  if(!opt||opt.months===null) return arr;
+  if(!opt) return arr;
+  if (opt.id === 'custom') {
+    if (!_microRangoDesde && !_microRangoHasta) return arr;
+    return arr.filter(e => (!_microRangoDesde || e.fecha>=_microRangoDesde) && (!_microRangoHasta || e.fecha<=_microRangoHasta));
+  }
+  if(opt.months===null) return arr;
   const sorted=microSorted();
   if(!sorted.length) return arr;
   const last=sorted[sorted.length-1].fecha;
