@@ -566,6 +566,25 @@
     }
 
     /* ═══════════════════════════════════════════
+       PIN LOCK
+    ═══════════════════════════════════════════ */
+    #pin-lock {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 1000; /* por encima del splash (999) para que lo tape también */
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #pin-lock .pin-box {
+      width: 100%;
+      max-width: 320px;
+      text-align: center;
+    }
+
+    /* ═══════════════════════════════════════════
        MACRO AR
     ═══════════════════════════════════════════ */
     .macro-subnav {
@@ -940,6 +959,22 @@
   <div class="splash-sub">Cargando...</div>
 </div>
 
+<!-- ── PIN LOCK (cortina de privacidad, no cifrado real) ── -->
+<div id="pin-lock">
+  <div class="pin-box">
+    <div style="font-size:40px;margin-bottom:10px">🔒</div>
+    <p id="pin-title" style="font-size:16px;font-weight:800;margin-bottom:6px">Ingresá tu PIN</p>
+    <p id="pin-subtitle" style="font-size:12px;color:var(--muted);margin-bottom:18px;min-height:16px"></p>
+    <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="pin-input-1" class="input"
+      placeholder="••••" style="text-align:center;font-size:22px;letter-spacing:10px;font-family:var(--mono);margin-bottom:10px"
+      onkeydown="if(event.key==='Enter') pinSubmit()">
+    <p id="pin-error" style="font-size:12px;color:var(--danger);min-height:16px;margin-bottom:6px"></p>
+    <button class="btn btn-primary btn-full" id="pin-submit-btn" onclick="pinSubmit()">Ingresar</button>
+    <button class="btn btn-outline btn-full" style="margin-top:8px;display:none" id="pin-forgot-btn" onclick="pinForgot()">¿Olvidaste tu PIN?</button>
+    <button class="btn btn-ghost btn-full" style="margin-top:8px;display:none" id="pin-cancel-btn" onclick="pinCancel()">Cancelar</button>
+  </div>
+</div>
+
 <!-- ── HEADER ── -->
 <header class="app-header" id="app-header">
   <div class="app-header-left">
@@ -949,9 +984,14 @@
       <div class="app-subtitle" id="app-subtitle">Resumen personal</div>
     </div>
   </div>
-  <button class="btn-backup-global" onclick="openBackupModal()" title="Exportar / Importar todos los datos">
-    💾
-  </button>
+  <div style="display:flex;gap:8px">
+    <button class="btn-backup-global" onclick="openSecurityModal()" title="Seguridad (PIN)">
+      🔒
+    </button>
+    <button class="btn-backup-global" onclick="openBackupModal()" title="Exportar / Importar todos los datos">
+      💾
+    </button>
+  </div>
 </header>
 
 <!-- ══════════════════════════════════════════
@@ -2027,6 +2067,16 @@
 <div id="toast"></div>
 
 <!-- ── MODAL BACKUP ── -->
+<div class="modal-overlay" id="modal-security" onclick="handleOverlayClick(event,'modal-security')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">🔒 Seguridad</span>
+      <button class="modal-close" onclick="closeModal('modal-security')">✕</button>
+    </div>
+    <div id="security-content"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-backup" onclick="handleOverlayClick(event,'modal-backup')">
   <div class="modal-box">
     <div class="modal-header">
@@ -2147,6 +2197,175 @@ function deepMerge(a, b) {
 }
 
 let STATE = loadState();
+
+/* ═══════════════════════════════════════════════════════════
+   PIN DE ACCESO — cortina de privacidad, NO es cifrado real.
+   Se guarda en una clave de localStorage totalmente separada de los datos
+   financieros (STATE), a propósito: así exportar/importar un backup nunca
+   toca el PIN, y sacarlo del todo (borrar esta clave) no afecta ni un solo
+   dato financiero.
+═══════════════════════════════════════════════════════════ */
+const PIN_STORE_KEY = 'finanzas_ar_pin_v1';
+
+function pinGetStored() {
+  try { const raw = localStorage.getItem(PIN_STORE_KEY); return raw ? JSON.parse(raw) : null; }
+  catch { return null; }
+}
+function pinSetStored(hash) { localStorage.setItem(PIN_STORE_KEY, JSON.stringify({ hash })); }
+function pinClearStored()   { localStorage.removeItem(PIN_STORE_KEY); }
+
+async function pinHash(pin) {
+  if (window.crypto?.subtle) {
+    const enc = new TextEncoder().encode(pin);
+    const buf = await crypto.subtle.digest('SHA-256', enc);
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  // Respaldo si el navegador no permite Web Crypto (ej. abriendo el archivo
+  // sin HTTPS): un hash simple, no criptográfico, solo para que no se rompa.
+  // El PIN sigue siendo una cortina, no cifrado real, con o sin esto.
+  let h = 0;
+  for (let i=0;i<pin.length;i++){ h = (h*31 + pin.charCodeAt(i))|0; }
+  return 'fallback_' + h.toString(16);
+}
+
+// _pinMode: 'unlock' | 'setup1' | 'setup2' | 'change-old' | 'change-new1' | 'change-new2' | 'remove'
+let _pinMode = null;
+let _pinTempFirst = null;
+let _pinMandatory = false; // true solo durante el bloqueo obligatorio al abrir la app
+
+function pinInit() {
+  const stored = pinGetStored();
+  const overlay = document.getElementById('pin-lock');
+  if (!stored) { overlay.style.display='none'; return; } // sin PIN configurado: no bloquear
+  _pinMandatory = true;
+  _pinMode = 'unlock';
+  overlay.style.display='flex';
+  document.body.style.overflow='hidden';
+  pinRenderScreen();
+}
+
+function pinRenderScreen() {
+  const title = document.getElementById('pin-title');
+  const subtitle = document.getElementById('pin-subtitle');
+  const input = document.getElementById('pin-input-1');
+  const submitBtn = document.getElementById('pin-submit-btn');
+  const forgotBtn = document.getElementById('pin-forgot-btn');
+  const cancelBtn = document.getElementById('pin-cancel-btn');
+  const err = document.getElementById('pin-error');
+  err.textContent = ''; input.value = '';
+  const verificaExistente = ['unlock','change-old','remove'].includes(_pinMode);
+  forgotBtn.style.display = verificaExistente ? 'block' : 'none';
+  cancelBtn.style.display = _pinMandatory ? 'none' : 'block';
+
+  if (_pinMode==='unlock') { title.textContent='Ingresá tu PIN'; subtitle.textContent=''; submitBtn.textContent='Ingresar'; }
+  else if (_pinMode==='setup1'||_pinMode==='change-new1') { title.textContent='Creá tu PIN'; subtitle.textContent='Entre 4 y 6 números.'; submitBtn.textContent='Continuar'; }
+  else if (_pinMode==='setup2'||_pinMode==='change-new2') { title.textContent='Confirmá tu PIN'; subtitle.textContent='Volvé a escribirlo para confirmar.'; submitBtn.textContent='Guardar PIN'; }
+  else if (_pinMode==='change-old') { title.textContent='Ingresá tu PIN actual'; subtitle.textContent='Para poder cambiarlo.'; submitBtn.textContent='Continuar'; }
+  else if (_pinMode==='remove') { title.textContent='Ingresá tu PIN para quitarlo'; subtitle.textContent=''; submitBtn.textContent='Quitar PIN'; }
+  input.focus();
+}
+
+async function pinSubmit() {
+  const val = document.getElementById('pin-input-1').value.trim();
+  const err = document.getElementById('pin-error');
+  if (!/^\d{4,6}$/.test(val)) { err.textContent='Ingresá entre 4 y 6 números.'; return; }
+
+  if (_pinMode==='unlock') {
+    const stored = pinGetStored();
+    const hash = await pinHash(val);
+    if (stored && hash===stored.hash) { pinUnlock(); }
+    else { err.textContent='PIN incorrecto.'; document.getElementById('pin-input-1').value=''; }
+    return;
+  }
+  if (_pinMode==='setup1'||_pinMode==='change-new1') {
+    _pinTempFirst = val;
+    _pinMode = (_pinMode==='setup1') ? 'setup2' : 'change-new2';
+    pinRenderScreen();
+    return;
+  }
+  if (_pinMode==='setup2'||_pinMode==='change-new2') {
+    if (val !== _pinTempFirst) {
+      err.textContent = 'No coincide con el anterior. Escribilo de nuevo.';
+      _pinMode = (_pinMode==='setup2') ? 'setup1' : 'change-new1';
+      _pinTempFirst = null;
+      document.getElementById('pin-input-1').value='';
+      return;
+    }
+    const hash = await pinHash(val);
+    pinSetStored(hash);
+    _pinTempFirst = null;
+    pinUnlock();
+    showToast('✓ PIN configurado','ok');
+    renderSecurityModalContent();
+    return;
+  }
+  if (_pinMode==='change-old') {
+    const stored = pinGetStored();
+    const hash = await pinHash(val);
+    if (!stored || hash!==stored.hash) { err.textContent='PIN actual incorrecto.'; return; }
+    _pinMode = 'change-new1';
+    pinRenderScreen();
+    return;
+  }
+  if (_pinMode==='remove') {
+    const stored = pinGetStored();
+    const hash = await pinHash(val);
+    if (!stored || hash!==stored.hash) { err.textContent='PIN incorrecto.'; return; }
+    pinClearStored();
+    pinUnlock();
+    showToast('✓ PIN eliminado — la app ya no lo va a pedir','ok');
+    renderSecurityModalContent();
+    return;
+  }
+}
+
+function pinUnlock() {
+  document.getElementById('pin-lock').style.display='none';
+  document.body.style.overflow='';
+}
+
+function pinForgot() {
+  if (!confirm('Esto borra el PIN (tus datos financieros NO se tocan). Vas a poder configurar uno nuevo cuando quieras desde 🔒. ¿Continuar?')) return;
+  pinClearStored();
+  pinUnlock();
+  showToast('PIN eliminado. Podés crear uno nuevo desde 🔒 cuando quieras.','ok');
+}
+
+function pinCancel() {
+  pinUnlock();
+  _pinTempFirst = null;
+  openModal('modal-security');
+  renderSecurityModalContent();
+}
+
+function openSecurityModal() {
+  renderSecurityModalContent();
+  openModal('modal-security');
+}
+function renderSecurityModalContent() {
+  const el = document.getElementById('security-content');
+  if (!el) return;
+  const stored = pinGetStored();
+  if (!stored) {
+    el.innerHTML = `
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+        Activá un PIN para que la app te lo pida cada vez que la abrís. Sirve para que alguien no vea tus datos si te agarra el celular desbloqueado — no es un cifrado real, así que no reemplaza cuidar el dispositivo.
+      </p>
+      <button class="btn btn-primary btn-full" onclick="closeModal('modal-security');pinStartSetup()">Activar PIN</button>
+    `;
+  } else {
+    el.innerHTML = `
+      <p style="font-size:13px;color:var(--ok);margin-bottom:16px">✓ PIN activado</p>
+      <button class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="closeModal('modal-security');pinStartChange()">Cambiar PIN</button>
+      <button class="btn btn-outline btn-full" style="border-color:var(--danger);color:var(--danger)" onclick="closeModal('modal-security');pinStartRemove()">Quitar PIN</button>
+    `;
+  }
+}
+function pinStartSetup()  { _pinMandatory=false; _pinMode='setup1';    _pinTempFirst=null; document.getElementById('pin-lock').style.display='flex'; document.body.style.overflow='hidden'; pinRenderScreen(); }
+function pinStartChange() { _pinMandatory=false; _pinMode='change-old';_pinTempFirst=null; document.getElementById('pin-lock').style.display='flex'; document.body.style.overflow='hidden'; pinRenderScreen(); }
+function pinStartRemove() { _pinMandatory=false; _pinMode='remove';    _pinTempFirst=null; document.getElementById('pin-lock').style.display='flex'; document.body.style.overflow='hidden'; pinRenderScreen(); }
+
+pinInit();
 
 /* ─── HELPERS GLOBALES ────────────────────────────────────── */
 function showToast(msg, type = '') {
