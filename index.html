@@ -1218,6 +1218,7 @@
       </div>
 
       <div id="port-deuda-vs-inv" style="margin-bottom:14px"></div>
+      <div id="port-flujo-capital" style="margin-bottom:14px"></div>
       <div class="grid-4" id="port-kpis" style="margin-bottom:14px"></div>
       <!-- Evolución -->
       <div class="card" style="margin-bottom:14px">
@@ -1978,6 +1979,7 @@
             <optgroup label="── Canastas ──">
               <option value="cba">CBA — Canasta Básica Alimentaria (hogar tipo)</option>
               <option value="cbt">CBT — Canasta Básica Total / umbral de pobreza (hogar tipo)</option>
+              <option value="tasa_pobreza">Tasa de pobreza — % de personas (INDEC, semestral)</option>
             </optgroup>
             <optgroup label="── Salarios ──">
               <option value="ripte">RIPTE — Salario promedio trabajadores formales (ARS)</option>
@@ -3896,6 +3898,84 @@ function portRenderDeudaVsInversion(){
     </div>`;
 }
 
+/* ── Flujo de Capital Neto ──
+   Un solo indicador: cuánta plata metiste a tu portafolio en total, menos
+   cuánta sacaste, sin contar ganancias ni pérdidas. Se calcula 100% con
+   datos que ya existen (capital inicial de cada categoría, aportes/retiros,
+   y movimientos de cajas de ahorro) — no requiere cargar nada nuevo.
+   Fórmula por categoría: capital actual − ganancias que le atribuiste con
+   "Resultado mensual" − aportes/retiros ya reflejados en ese capital = el
+   capital ORIGINAL que pusiste al activarla. A eso se le suman, aparte,
+   todos los aportes/retiros históricos (con signo) y los movimientos de
+   cajas de ahorro, cada uno valuado al tipo de cambio de su propio mes
+   (igual que hace el resto de Portafolio con datos históricos). */
+function calcFlujoCapitalNeto() {
+  let flujoARS = 0;
+
+  PORT_CAT_DEFS.forEach(d => {
+    const cs = portGetCatState(d.id);
+    if (!cs || !cs.capital) return;
+
+    // Cripto está sincronizada con Hodler: cs.capital ahí es el patrimonio
+    // TOTAL de Hodler, que incluye ganancias/pérdidas de mercado — no se
+    // puede usar la misma resta de "resultados" que las demás categorías,
+    // porque no hay resultados registrados ahí (se limpiaron al sincronizar).
+    // En su lugar, se usa lo que Hodler SÍ rastrea como capital aportado:
+    // su propio presupuesto + aportes − retiradas, valuado a la cotización
+    // actual (Hodler no guarda fecha para el presupuesto).
+    if (d.id === 'cripto') {
+      const { pres, totalAp, totalRet } = hodlCalcPatrimonioTotal();
+      const capitalHodler = pres + totalAp - totalRet;
+      flujoARS += portToARSWithType(capitalHodler, cs.currency, cs.usdType);
+      return;
+    }
+
+    let origCapital;
+    if (d.id === 'pf') {
+      origCapital = cs.capital; // el principal de PF nunca se mezcla con resultados
+    } else {
+      const totR = (PS().results||[]).filter(r=>r.catId===d.id).reduce((s,r)=>s+r.gain,0);
+      const totA = (PS().aports||[]).filter(a=>a.catId===d.id).reduce((s,a)=>s+portAportSign(a)*portAportToCatCur(a,cs),0);
+      origCapital = cs.capital - totR - totA;
+    }
+    flujoARS += portToARSAtWithType(origCapital, cs.currency, cs.usdType, cs.startMonth, cs.startYear);
+  });
+
+  // Los aportes/retiros de Portafolio con catId='cripto' ya no existen (se
+  // limpiaron al sincronizar con Hodler), así que este loop no los duplica.
+  (PS().aports||[]).forEach(a => {
+    const cs = portGetCatState(a.catId);
+    if (!cs) return;
+    flujoARS += portAportSign(a) * portAportToARS(a, cs);
+  });
+
+  (PS().cajas||[]).forEach(c => {
+    flujoARS += portToARSAtWithType(c.balance, c.currency, c.usdType, c.startMonth||PORT_NOW_M, c.startYear||PORT_NOW_Y);
+  });
+  (PS().cajaMovs||[]).forEach(mv => {
+    const caja = (PS().cajas||[]).find(c=>c.id===mv.cajaId);
+    if (!caja) return;
+    const signo = mv.type==='extraccion' ? -1 : 1;
+    flujoARS += signo*portToARSAtWithType(mv.amount, caja.currency, caja.usdType, mv.month, mv.year);
+  });
+
+  return flujoARS;
+}
+
+function portRenderFlujoCapital() {
+  const el = document.getElementById('port-flujo-capital');
+  if (!el) return;
+  const flujoARS = calcFlujoCapitalNeto();
+  if (flujoARS === 0) { el.innerHTML=''; return; } // nada cargado todavía: no mostrar la tarjeta vacía
+  const color = flujoARS>=0 ? 'var(--port)' : 'var(--danger)';
+  el.innerHTML = `
+    <div class="card" style="border-left:3px solid ${color}">
+      <p class="card-label" style="margin-bottom:6px">💵 Flujo de Capital Neto</p>
+      <p style="font-family:var(--mono);font-size:22px;font-weight:700;color:${color}">${portFmt(portToDisplay(flujoARS))}</p>
+      <p style="font-size:11px;color:var(--muted);margin-top:4px">Todo lo que metiste a tu portafolio, menos lo que sacaste — sin contar ganancias ni pérdidas.</p>
+    </div>`;
+}
+
 /* ── Capital ── */
 function portRenderCapital(){
   const pfDef=PORT_CAT_DEFS[0], pfCs=portGetCatState('pf');
@@ -4018,6 +4098,7 @@ function portRenderAports(){
 /* ── Render all ── */
 function portRenderDash(){
   portRenderDeudaVsInversion();
+  portRenderFlujoCapital();
   portRenderKPIs();
   portRenderCharts();
   portRenderDollarRates();
@@ -6513,6 +6594,10 @@ const MICRO_INDICATORS = [
     label:'CBT — Canasta Básica Total / umbral de pobreza (hogar tipo)',
     unit:'ARS', color:'#f59e0b', dec:0, min:0, max:1e8,
     hint:'Valor mensual en pesos de la canasta completa (alimentos + servicios + vestimenta + transporte) para una familia de 4 personas. Si el ingreso familiar es menor a este valor, el hogar es pobre.' },
+  { id:'tasa_pobreza', short:'Tasa de pobreza',
+    label:'Tasa de pobreza — % de personas por debajo de la CBT (INDEC)',
+    unit:'% de personas', color:'#ef4444', dec:1, min:0, max:100,
+    hint:'Porcentaje de personas cuyo ingreso familiar no alcanza a cubrir la Canasta Básica Total. Es un dato SEMESTRAL: el INDEC lo publica dos veces al año (marzo y septiembre, con datos del semestre cerrado en diciembre y junio respectivamente). Cargalo solo en esos dos meses de cierre (junio y diciembre) y dejá vacío el resto.' },
   { id:'ripte', short:'RIPTE',
     label:'RIPTE — Salario promedio de trabajadores formales',
     unit:'ARS', color:'#4ade80', dec:0, min:0, max:1e8,
