@@ -1606,6 +1606,7 @@
   <div class="macro-subnav">
     <button class="gastos-tab macro-tab active" data-tab="ggastos" onclick="gastosTab('ggastos',this)">Gastos</button>
     <button class="gastos-tab macro-tab"        data-tab="gdeudas" onclick="gastosTab('gdeudas',this)">Deudas</button>
+    <button class="gastos-tab macro-tab"        data-tab="gfijos"  onclick="gastosTab('gfijos',this)">Gastos fijos</button>
   </div>
 
   <div id="gastos-ggastos" class="gastos-panel active">
@@ -1876,6 +1877,48 @@
 
   </div>
   </div><!-- /gastos-gdeudas -->
+
+  <!-- ══════════════════════════════════════════
+       PANEL: GASTOS FIJOS
+  ══════════════════════════════════════════ -->
+  <div id="gastos-gfijos" class="gastos-panel">
+  <div class="content">
+
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+        <p style="font-size:15px;font-weight:700">Inflación de gastos fijos</p>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="gastFijosChangeMonth(-1)">‹</button>
+          <span id="gast-fijos-month-label" style="font-family:var(--mono);font-size:13px;min-width:110px;text-align:center"></span>
+          <button class="btn btn-outline btn-sm" onclick="gastFijosChangeMonth(1)">›</button>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:14px">
+        Aumento mensual (vs. el mes anterior) y acumulado desde enero, para tus gastos fijos: Casa/Alquiler, Luz, Gas, Servicio de agua, Impuesto Municipal, Telefonía/Internet, Auto/Combustible, Seguro y Salud.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Categoría</th><th>Monto</th><th>Mensual</th><th>Acum. año</th></tr></thead>
+          <tbody id="gast-fijos-tbody"></tbody>
+        </table>
+      </div>
+      <p style="font-size:10px;color:var(--dimmed);margin-top:10px">
+        "—" significa que falta un dato para calcular ese porcentaje (no cargaste gasto ese mes, o falta algún mes en el medio para el acumulado).
+      </p>
+    </div>
+
+    <div class="card">
+      <p style="font-size:13px;font-weight:700;margin-bottom:6px">Evolución del total de gastos fijos</p>
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px">
+        <button class="btn btn-outline btn-sm" onclick="gastFijosChangeYear(-1)">‹</button>
+        <span id="gast-fijos-year-label" style="font-family:var(--mono);font-size:13px;min-width:50px;text-align:center"></span>
+        <button class="btn btn-outline btn-sm" onclick="gastFijosChangeYear(1)">›</button>
+      </div>
+      <div style="position:relative;height:200px"><canvas id="gast-fijos-chart"></canvas></div>
+    </div>
+
+  </div>
+  </div><!-- /gastos-gfijos -->
 
   <!-- Modal editar gasto -->
   <div class="modal-overlay" id="gast-modal-edit" onclick="handleOverlayClick(event,'gast-modal-edit')">
@@ -6306,6 +6349,157 @@ function gastosTab(name, btn) {
   document.querySelectorAll('.gastos-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   if (name === 'gdeudas') deudaRenderAll();
+  if (name === 'gfijos') gastRenderFijos();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: GASTOS FIJOS — inflación de gastos fijos del hogar
+   Agrupa categorías ya existentes (Vivienda/casa, Luz, Gas, etc.) y calcula,
+   para cada una, el aumento mensual (vs. el mes anterior) y el acumulado
+   desde enero — igual que la Inflación acumulada anual de Macro AR: se
+   encadenan los % de cada mes, y si falta un mes en el medio, el acumulado
+   no se puede afirmar y se muestra "—" en vez de un número engañoso.
+═══════════════════════════════════════════════════════════ */
+const GASTOS_FIJOS_CATS = [
+  { label:'Casa/Alquiler',      cats:['Vivienda/casa'] },
+  { label:'Luz',                cats:['Luz'] },
+  { label:'Gas',                cats:['Gas'] },
+  { label:'Servicio de agua',   cats:['Servicio de agua'] },
+  { label:'Impuesto Municipal', cats:['Impuesto Municipal'] },
+  { label:'Telefonía/Internet', cats:['Telefonía','TV/Internet'] },
+  { label:'Auto/Combustible',   cats:['Auto/Combustible'] },
+  { label:'Seguro',             cats:['Seguro'] },
+  { label:'Salud',              cats:['Salud'] },
+];
+
+let _gastFijosMonth = new Date().getMonth();
+let _gastFijosYear  = new Date().getFullYear();
+let _gastFijosChartYear = new Date().getFullYear();
+let _gastFijosChart = null;
+
+// Suma lo gastado en una o más categorías (ya agrupadas) en un mes puntual.
+function gastFijosMontoEnMes(catsArr, year, month0) {
+  const key = gastMonthKey(year, month0);
+  return (GS().expenses||[])
+    .filter(e => e.date.startsWith(key) && catsArr.includes(e.category) && gastIsExpense(e))
+    .reduce((s,e)=>s+e.amount, 0);
+}
+
+// % vs. el mes anterior. Si no hay gasto cargado el mes anterior, no hay
+// base para calcular un porcentaje real — se devuelve null (se muestra "—").
+function gastFijosPctMensual(catsArr, year, month0) {
+  const actual = gastFijosMontoEnMes(catsArr, year, month0);
+  let py=year, pm=month0-1;
+  if (pm<0) { pm=11; py--; }
+  const anterior = gastFijosMontoEnMes(catsArr, py, pm);
+  if (anterior <= 0) return null;
+  return ((actual-anterior)/anterior)*100;
+}
+
+// Encadena el % mensual de cada mes desde enero hasta el mes elegido (mismo
+// método que "Inflación acumulada anual" en Macro AR). Si falta un solo mes
+// en el medio, no se puede afirmar el acumulado del año.
+function gastFijosPctAcumAnual(catsArr, year, month0) {
+  let acumP = 1;
+  for (let m=0; m<=month0; m++) {
+    const pct = gastFijosPctMensual(catsArr, year, m);
+    if (pct==null) return null;
+    acumP *= (1+pct/100);
+  }
+  return (acumP-1)*100;
+}
+
+function gastFijosChangeMonth(dir) {
+  _gastFijosMonth += dir;
+  if (_gastFijosMonth>11) { _gastFijosMonth=0; _gastFijosYear++; }
+  if (_gastFijosMonth<0)  { _gastFijosMonth=11; _gastFijosYear--; }
+  gastRenderFijos();
+}
+function gastFijosChangeYear(dir) {
+  _gastFijosChartYear += dir;
+  gastFijosRenderChart();
+}
+
+// Sube (rojo) es más gasto = malo; baja (verde) es menos gasto = bueno —
+// mismo criterio de color que ya usa el resto de Gastos.
+function gastFijosFmtPct(pct) {
+  if (pct==null) return '<span style="color:var(--dimmed)">—</span>';
+  const color = pct>0.5?'var(--danger)':(pct<-0.5?'var(--ok)':'var(--muted)');
+  const sign = pct>=0?'+':'';
+  return `<span style="color:${color};font-weight:700">${sign}${pct.toFixed(1)}%</span>`;
+}
+
+function gastRenderFijos() {
+  const monthNames=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const label = document.getElementById('gast-fijos-month-label');
+  if (label) label.textContent = `${monthNames[_gastFijosMonth]} ${_gastFijosYear}`;
+
+  const tbody = document.getElementById('gast-fijos-tbody');
+  if (tbody) {
+    let filas = GASTOS_FIJOS_CATS.map(fc => {
+      const monto = gastFijosMontoEnMes(fc.cats, _gastFijosYear, _gastFijosMonth);
+      const pctM  = gastFijosPctMensual(fc.cats, _gastFijosYear, _gastFijosMonth);
+      const pctA  = gastFijosPctAcumAnual(fc.cats, _gastFijosYear, _gastFijosMonth);
+      return `<tr>
+        <td>${fc.label}</td>
+        <td class="mono">${gastFmt(monto)}</td>
+        <td>${gastFijosFmtPct(pctM)}</td>
+        <td>${gastFijosFmtPct(pctA)}</td>
+      </tr>`;
+    }).join('');
+
+    const todasCats = GASTOS_FIJOS_CATS.flatMap(fc=>fc.cats);
+    const montoTotal = gastFijosMontoEnMes(todasCats, _gastFijosYear, _gastFijosMonth);
+    const pctMTotal  = gastFijosPctMensual(todasCats, _gastFijosYear, _gastFijosMonth);
+    const pctATotal  = gastFijosPctAcumAnual(todasCats, _gastFijosYear, _gastFijosMonth);
+    filas += `<tr style="font-weight:700;border-top:2px solid var(--border)">
+      <td>TOTAL</td>
+      <td class="mono" style="color:var(--gastos)">${gastFmt(montoTotal)}</td>
+      <td>${gastFijosFmtPct(pctMTotal)}</td>
+      <td>${gastFijosFmtPct(pctATotal)}</td>
+    </tr>`;
+    tbody.innerHTML = filas;
+  }
+
+  gastFijosRenderChart();
+}
+
+function gastFijosRenderChart() {
+  const yearLabel = document.getElementById('gast-fijos-year-label');
+  if (yearLabel) yearLabel.textContent = _gastFijosChartYear;
+  const ctx = document.getElementById('gast-fijos-chart')?.getContext('2d');
+  if (!ctx) return;
+  const todasCats = GASTOS_FIJOS_CATS.flatMap(fc=>fc.cats);
+  const montos = [];
+  for (let m=0; m<12; m++) {
+    const v = gastFijosMontoEnMes(todasCats, _gastFijosChartYear, m);
+    montos.push(v>0 ? v : null); // sin gasto ese mes: hueco en la línea, no un $0 falso
+  }
+  if (_gastFijosChart) _gastFijosChart.destroy();
+  _gastFijosChart = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels:['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
+      datasets:[{
+        label:'Total gastos fijos',
+        data:montos, spanGaps:true,
+        borderColor:'#e8ff47', backgroundColor:'#e8ff4722',
+        fill:true, tension:.3, pointRadius:c=>c.raw==null?0:3,
+        pointBackgroundColor:'#e8ff47', borderWidth:2,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{
+        backgroundColor:'#191c26', borderColor:'#252936', borderWidth:1, titleColor:'#e8eaf2', bodyColor:'#e8eaf2',
+        callbacks:{label:c=>c.raw==null?'Sin datos':gastFmt(c.raw)}
+      }},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:10}}},
+        y:{grid:{color:'#252936'},ticks:{color:'#5a6080',font:{size:10},callback:v=>gastFmtShort(v)}}
+      }
+    }
+  });
 }
 
 /* ── Cálculo de la cuota (sistema francés si hay TNA, sin interés si no) ── */
@@ -6567,6 +6761,7 @@ function ongastosEnter() {
   gastBuildYearSelect();
   gastRenderAll();
   deudaRenderAll();
+  gastRenderFijos();
 }
 
 // Fecha de hoy
