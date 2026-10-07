@@ -1607,6 +1607,7 @@
     <button class="gastos-tab macro-tab active" data-tab="ggastos" onclick="gastosTab('ggastos',this)">Gastos</button>
     <button class="gastos-tab macro-tab"        data-tab="gdeudas" onclick="gastosTab('gdeudas',this)">Deudas</button>
     <button class="gastos-tab macro-tab"        data-tab="gfijos"  onclick="gastosTab('gfijos',this)">Gastos fijos</button>
+    <button class="gastos-tab macro-tab"        data-tab="gvariables" onclick="gastosTab('gvariables',this)">Gastos variables</button>
   </div>
 
   <div id="gastos-ggastos" class="gastos-panel active">
@@ -1919,6 +1920,48 @@
 
   </div>
   </div><!-- /gastos-gfijos -->
+
+  <!-- ══════════════════════════════════════════
+       PANEL: GASTOS VARIABLES
+  ══════════════════════════════════════════ -->
+  <div id="gastos-gvariables" class="gastos-panel">
+  <div class="content">
+
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+        <p style="font-size:15px;font-weight:700">Inflación de gastos variables</p>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="gastVarChangeMonth(-1)">‹</button>
+          <span id="gast-var-month-label" style="font-family:var(--mono);font-size:13px;min-width:110px;text-align:center"></span>
+          <button class="btn btn-outline btn-sm" onclick="gastVarChangeMonth(1)">›</button>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:14px">
+        Aumento mensual (vs. el mes anterior) y acumulado desde enero, para tus gastos variables: Supermercado, Esposa, Tarjeta y Varios.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Categoría</th><th>Monto</th><th>Mensual</th><th>Acum. año</th></tr></thead>
+          <tbody id="gast-var-tbody"></tbody>
+        </table>
+      </div>
+      <p style="font-size:10px;color:var(--dimmed);margin-top:10px">
+        "—" significa que falta un dato para calcular ese porcentaje (no cargaste gasto ese mes, o falta algún mes en el medio para el acumulado).
+      </p>
+    </div>
+
+    <div class="card">
+      <p style="font-size:13px;font-weight:700;margin-bottom:6px">Evolución del total de gastos variables</p>
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px">
+        <button class="btn btn-outline btn-sm" onclick="gastVarChangeYear(-1)">‹</button>
+        <span id="gast-var-year-label" style="font-family:var(--mono);font-size:13px;min-width:50px;text-align:center"></span>
+        <button class="btn btn-outline btn-sm" onclick="gastVarChangeYear(1)">›</button>
+      </div>
+      <div style="position:relative;height:200px"><canvas id="gast-var-chart"></canvas></div>
+    </div>
+
+  </div>
+  </div><!-- /gastos-gvariables -->
 
   <!-- Modal editar gasto -->
   <div class="modal-overlay" id="gast-modal-edit" onclick="handleOverlayClick(event,'gast-modal-edit')">
@@ -6350,6 +6393,7 @@ function gastosTab(name, btn) {
   btn.classList.add('active');
   if (name === 'gdeudas') deudaRenderAll();
   if (name === 'gfijos') gastRenderFijos();
+  if (name === 'gvariables') gastRenderVariables();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -6486,6 +6530,110 @@ function gastFijosRenderChart() {
         borderColor:'#e8ff47', backgroundColor:'#e8ff4722',
         fill:true, tension:.3, pointRadius:c=>c.raw==null?0:3,
         pointBackgroundColor:'#e8ff47', borderWidth:2,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{
+        backgroundColor:'#191c26', borderColor:'#252936', borderWidth:1, titleColor:'#e8eaf2', bodyColor:'#e8eaf2',
+        callbacks:{label:c=>c.raw==null?'Sin datos':gastFmt(c.raw)}
+      }},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:10}}},
+        y:{grid:{color:'#252936'},ticks:{color:'#5a6080',font:{size:10},callback:v=>gastFmtShort(v)}}
+      }
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: GASTOS VARIABLES — inflación de gastos variables
+   Mismo motor de cálculo que Gastos Fijos (mes a mes, acumulado encadenado
+   desde enero, "—" si falta un dato) — acá solo cambia qué categorías entran.
+   gastFijosPctMensual/gastFijosPctAcumAnual/gastFijosFmtPct son genéricas
+   (reciben la lista de categorías como parámetro), así que se reutilizan tal
+   cual, sin duplicar la lógica ya probada.
+═══════════════════════════════════════════════════════════ */
+const GASTOS_VARIABLES_CATS = [
+  { label:'Supermercado', cats:['Supermercado'] },
+  { label:'Esposa',       cats:['Esposa'] },
+  { label:'Tarjeta',      cats:['Tarjeta'] },
+  { label:'Varios',       cats:['Varios'] },
+];
+
+let _gastVarMonth = new Date().getMonth();
+let _gastVarYear  = new Date().getFullYear();
+let _gastVarChartYear = new Date().getFullYear();
+let _gastVarChart = null;
+
+function gastVarChangeMonth(dir) {
+  _gastVarMonth += dir;
+  if (_gastVarMonth>11) { _gastVarMonth=0; _gastVarYear++; }
+  if (_gastVarMonth<0)  { _gastVarMonth=11; _gastVarYear--; }
+  gastRenderVariables();
+}
+function gastVarChangeYear(dir) {
+  _gastVarChartYear += dir;
+  gastVarRenderChart();
+}
+
+function gastRenderVariables() {
+  const monthNames=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const label = document.getElementById('gast-var-month-label');
+  if (label) label.textContent = `${monthNames[_gastVarMonth]} ${_gastVarYear}`;
+
+  const tbody = document.getElementById('gast-var-tbody');
+  if (tbody) {
+    let filas = GASTOS_VARIABLES_CATS.map(fc => {
+      const monto = gastFijosMontoEnMes(fc.cats, _gastVarYear, _gastVarMonth);
+      const pctM  = gastFijosPctMensual(fc.cats, _gastVarYear, _gastVarMonth);
+      const pctA  = gastFijosPctAcumAnual(fc.cats, _gastVarYear, _gastVarMonth);
+      return `<tr>
+        <td>${fc.label}</td>
+        <td class="mono">${gastFmt(monto)}</td>
+        <td>${gastFijosFmtPct(pctM)}</td>
+        <td>${gastFijosFmtPct(pctA)}</td>
+      </tr>`;
+    }).join('');
+
+    const todasCats = GASTOS_VARIABLES_CATS.flatMap(fc=>fc.cats);
+    const montoTotal = gastFijosMontoEnMes(todasCats, _gastVarYear, _gastVarMonth);
+    const pctMTotal  = gastFijosPctMensual(todasCats, _gastVarYear, _gastVarMonth);
+    const pctATotal  = gastFijosPctAcumAnual(todasCats, _gastVarYear, _gastVarMonth);
+    filas += `<tr style="font-weight:700;border-top:2px solid var(--border)">
+      <td>TOTAL</td>
+      <td class="mono" style="color:var(--gastos)">${gastFmt(montoTotal)}</td>
+      <td>${gastFijosFmtPct(pctMTotal)}</td>
+      <td>${gastFijosFmtPct(pctATotal)}</td>
+    </tr>`;
+    tbody.innerHTML = filas;
+  }
+
+  gastVarRenderChart();
+}
+
+function gastVarRenderChart() {
+  const yearLabel = document.getElementById('gast-var-year-label');
+  if (yearLabel) yearLabel.textContent = _gastVarChartYear;
+  const ctx = document.getElementById('gast-var-chart')?.getContext('2d');
+  if (!ctx) return;
+  const todasCats = GASTOS_VARIABLES_CATS.flatMap(fc=>fc.cats);
+  const montos = [];
+  for (let m=0; m<12; m++) {
+    const v = gastFijosMontoEnMes(todasCats, _gastVarChartYear, m);
+    montos.push(v>0 ? v : null);
+  }
+  if (_gastVarChart) _gastVarChart.destroy();
+  _gastVarChart = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels:['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
+      datasets:[{
+        label:'Total gastos variables',
+        data:montos, spanGaps:true,
+        borderColor:'#f472b6', backgroundColor:'#f472b622',
+        fill:true, tension:.3, pointRadius:c=>c.raw==null?0:3,
+        pointBackgroundColor:'#f472b6', borderWidth:2,
       }]
     },
     options:{
@@ -6762,6 +6910,7 @@ function ongastosEnter() {
   gastRenderAll();
   deudaRenderAll();
   gastRenderFijos();
+  gastRenderVariables();
 }
 
 // Fecha de hoy
