@@ -5793,7 +5793,11 @@ function calcSaludFinanciera() {
   });
   const mesesCubiertos = gastoMes > 0 ? liquidoARS / gastoMes : null;
 
-  return { cuotaTotal, ingresoMes, ratioCuotaIngreso, liquidoARS, gastoMes, mesesCubiertos };
+  // Tasa de ahorro: (Ahorro + Inversión del mes) / Ingreso del mes
+  const ahorroMes = exps.filter(e => e.date.startsWith(curKey) && gastIsSavings(e)).reduce((s,e)=>s+e.amount, 0);
+  const tasaAhorro = ingresoMes > 0 ? (ahorroMes / ingresoMes) * 100 : null;
+
+  return { cuotaTotal, ingresoMes, ratioCuotaIngreso, liquidoARS, gastoMes, mesesCubiertos, ahorroMes, tasaAhorro };
 }
 
 function gastSemaforoCuota(pct) {
@@ -5808,18 +5812,25 @@ function gastSemaforoFondo(meses) {
   if (meses < 3)       return { color:'var(--warn)',  emoji:'🟡', label:'En construcción' };
   return                     { color:'var(--ok)',    emoji:'🟢', label:'Cubierto' };
 }
+function gastSemaforoAhorro(pct) {
+  if (pct == null) return { color:'var(--muted)', emoji:'⚪', label:'Sin ingresos cargados este mes' };
+  if (pct < 10)      return { color:'var(--danger)',emoji:'🔴', label:'Bajo' };
+  if (pct < 20)      return { color:'var(--warn)',  emoji:'🟡', label:'En camino' };
+  return                   { color:'var(--ok)',    emoji:'🟢', label:'Meta alcanzada' };
+}
 
 function gastRenderSaludFinanciera() {
   const el = document.getElementById('gast-salud-financiera');
   if (!el) return;
-  const { ratioCuotaIngreso, mesesCubiertos } = calcSaludFinanciera();
+  const { ratioCuotaIngreso, mesesCubiertos, tasaAhorro } = calcSaludFinanciera();
   const c1 = gastSemaforoCuota(ratioCuotaIngreso);
   const c2 = gastSemaforoFondo(mesesCubiertos);
+  const c3 = gastSemaforoAhorro(tasaAhorro);
 
   el.innerHTML = `
     <div class="card">
       <p class="card-label" style="margin-bottom:12px">🩺 Salud financiera</p>
-      <div class="grid-2" style="gap:14px">
+      <div class="grid-3" style="gap:14px">
         <div>
           <p style="font-size:10px;color:var(--muted);margin-bottom:4px">Cuota / Ingreso</p>
           <p style="font-family:var(--mono);font-size:22px;font-weight:700;color:${c1.color}">${ratioCuotaIngreso!=null?ratioCuotaIngreso.toFixed(0)+'%':'—'} ${c1.emoji}</p>
@@ -5829,6 +5840,11 @@ function gastRenderSaludFinanciera() {
           <p style="font-size:10px;color:var(--muted);margin-bottom:4px">Fondo de emergencia</p>
           <p style="font-family:var(--mono);font-size:22px;font-weight:700;color:${c2.color}">${mesesCubiertos!=null?mesesCubiertos.toFixed(1)+' meses':'—'} ${c2.emoji}</p>
           <p style="font-size:11px;color:${c2.color};margin-top:2px">${c2.label} <span style="color:var(--muted)">(recomendado: 3-6 meses)</span></p>
+        </div>
+        <div>
+          <p style="font-size:10px;color:var(--muted);margin-bottom:4px">Tasa de ahorro</p>
+          <p style="font-family:var(--mono);font-size:22px;font-weight:700;color:${c3.color}">${tasaAhorro!=null?tasaAhorro.toFixed(0)+'%':'—'} ${c3.emoji}</p>
+          <p style="font-size:11px;color:${c3.color};margin-top:2px">${c3.label} <span style="color:var(--muted)">(meta: 20%)</span></p>
         </div>
       </div>
     </div>`;
