@@ -1819,6 +1819,24 @@
       </div>
     </div>
 
+    <!-- Ahorro e Inversión acumulados -->
+    <div class="card" style="margin-top:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+        <p style="font-size:15px;font-weight:700">Ahorro e Inversión acumulados</p>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="gastAhorroInvChangeYear(-1)">‹</button>
+          <span id="gast-ahorroinv-year-label" style="font-family:var(--mono);font-size:13px;min-width:50px;text-align:center"></span>
+          <button class="btn btn-outline btn-sm" onclick="gastAhorroInvChangeYear(1)">›</button>
+          <button class="gast-toggle-btn" onclick="gastToggleSection('gast-ahorroinv-wrap', this)">ocultar</button>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Lo que fuiste metiendo en Ahorro e Inversión desde que empezaste a usar la app (histórico), y cómo se fue acumulando mes a mes en el año que elijas.</p>
+      <div class="gast-collapsible" id="gast-ahorroinv-wrap">
+        <div id="gast-ahorroinv-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px"></div>
+        <div style="position:relative;height:200px"><canvas id="gast-ahorroinv-chart"></canvas></div>
+      </div>
+    </div>
+
   </div>
   </div><!-- /gastos-ggastos -->
 
@@ -1899,7 +1917,7 @@
       </p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Categoría</th><th>Monto</th><th>Mensual</th><th>Acum. año</th></tr></thead>
+          <thead><tr><th>Categoría</th><th>Monto</th><th>% del total</th><th>Mensual</th><th>Acum. año</th></tr></thead>
           <tbody id="gast-fijos-tbody"></tbody>
         </table>
       </div>
@@ -1941,7 +1959,7 @@
       </p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Categoría</th><th>Monto</th><th>Mensual</th><th>Acum. año</th></tr></thead>
+          <thead><tr><th>Categoría</th><th>Monto</th><th>% del total</th><th>Mensual</th><th>Acum. año</th></tr></thead>
           <tbody id="gast-var-tbody"></tbody>
         </table>
       </div>
@@ -6370,6 +6388,91 @@ function gastRenderAcumBarChart(months) {
   });
 }
 
+/* ── Ahorro e Inversión acumulados ──
+   Total histórico (de toda la vida de la app) de lo cargado en las
+   categorías "Ahorro" e "Inversión", más un gráfico del acumulado mes a mes
+   dentro del año que el usuario elija navegar. */
+let _gastAhorroInvYear = new Date().getFullYear();
+let _gastAhorroInvChart = null;
+
+function gastRenderAhorroInv() {
+  const exps = GS().expenses || [];
+  const totalAhorro    = exps.filter(e => e.category==='Ahorro').reduce((s,e)=>s+e.amount,0);
+  const totalInversion = exps.filter(e => e.category==='Inversión').reduce((s,e)=>s+e.amount,0);
+  const totalCombinado = totalAhorro + totalInversion;
+
+  const el = document.getElementById('gast-ahorroinv-summary');
+  if (el) {
+    el.innerHTML = `
+      <div class="card" style="padding:12px;border-top:2px solid #34d399">
+        <p class="card-label" style="margin-bottom:4px">Ahorro acumulado</p>
+        <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:#34d399">${gastFmt(totalAhorro)}</p>
+      </div>
+      <div class="card" style="padding:12px;border-top:2px solid #60a5fa">
+        <p class="card-label" style="margin-bottom:4px">Inversión acumulada</p>
+        <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:#60a5fa">${gastFmt(totalInversion)}</p>
+      </div>
+      <div class="card" style="padding:12px;border-top:2px solid var(--gastos)">
+        <p class="card-label" style="margin-bottom:4px">Total combinado</p>
+        <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--gastos)">${gastFmt(totalCombinado)}</p>
+      </div>
+    `;
+  }
+  gastAhorroInvRenderChart();
+}
+
+function gastAhorroInvChangeYear(dir) {
+  _gastAhorroInvYear += dir;
+  gastAhorroInvRenderChart();
+}
+
+function gastAhorroInvRenderChart() {
+  const yearLabel = document.getElementById('gast-ahorroinv-year-label');
+  if (yearLabel) yearLabel.textContent = _gastAhorroInvYear;
+  const ctx = document.getElementById('gast-ahorroinv-chart')?.getContext('2d');
+  if (!ctx) return;
+
+  const exps = GS().expenses || [];
+  const montosPorMes = [];
+  for (let m=0; m<12; m++) {
+    const key = gastMonthKey(_gastAhorroInvYear, m);
+    const monto = exps
+      .filter(e => e.date.startsWith(key) && (e.category==='Ahorro' || e.category==='Inversión'))
+      .reduce((s,e)=>s+e.amount, 0);
+    montosPorMes.push(monto);
+  }
+  // Acumulado corrido DESDE ENERO de este año (no arrastra saldo de años
+  // anteriores — mismo criterio que "Acumulado del año" de más arriba).
+  let acumulado = 0;
+  const dataPoints = montosPorMes.map(m => { acumulado += m; return acumulado; });
+
+  if (_gastAhorroInvChart) _gastAhorroInvChart.destroy();
+  _gastAhorroInvChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels:['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
+      datasets:[{
+        label:'Acumulado Ahorro + Inversión',
+        data:dataPoints,
+        backgroundColor:'#34d39999',
+        borderColor:'#34d399',
+        borderWidth:1.5, borderRadius:4,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{
+        backgroundColor:'#191c26', borderColor:'#252936', borderWidth:1, titleColor:'#e8eaf2', bodyColor:'#e8eaf2',
+        callbacks:{label:c=>gastFmt(c.raw)}
+      }},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:10}}},
+        y:{grid:{color:'#252936'},ticks:{color:'#5a6080',font:{size:10},callback:v=>gastFmtShort(v)}}
+      }
+    }
+  });
+}
+
 function gastBalanceDetailHTML(mm) {
   const balColor = mm.balance>=0 ? 'var(--gastos)' : 'var(--danger)';
   return `<div style="font-weight:700;color:var(--text);margin-bottom:4px;text-transform:capitalize">${mm.label} ${_gastBalanceYear}</div><span style="color:var(--ok)">Ingreso: ${gastFmt(mm.inc)}</span> &nbsp;·&nbsp; <span style="color:#ff6b35">Gasto: ${gastFmt(mm.exp)}</span>${mm.sav>0?` &nbsp;·&nbsp; <span style="color:#a78bfa">Ahorro/Inv: ${gastFmt(mm.sav)}</span>`:''} &nbsp;·&nbsp; <span style="color:${balColor};font-weight:700">Balance: ${mm.balance>=0?'+':''}${gastFmt(mm.balance)}</span>`;
@@ -6445,6 +6548,21 @@ function gastFijosMontoEnMes(catsArr, year, month0) {
     .reduce((s,e)=>s+e.amount, 0);
 }
 
+// Total de TODOS los gastos (cualquier categoría) de un mes puntual — se usa
+// para calcular qué % del gasto total representa cada categoría o grupo.
+// Compartida entre Gastos Fijos y Gastos Variables.
+function gastTotalGastoMes(year, month0) {
+  const key = gastMonthKey(year, month0);
+  return (GS().expenses||[])
+    .filter(e => e.date.startsWith(key) && gastIsExpense(e))
+    .reduce((s,e)=>s+e.amount, 0);
+}
+function gastPctDelTotalMes(monto, year, month0) {
+  const total = gastTotalGastoMes(year, month0);
+  if (total <= 0) return null;
+  return (monto/total)*100;
+}
+
 // % vs. el mes anterior. Si no hay gasto cargado el mes anterior, no hay
 // base para calcular un porcentaje real — se devuelve null (se muestra "—").
 function gastFijosPctMensual(catsArr, year, month0) {
@@ -6503,6 +6621,7 @@ function gastRenderFijos() {
       return `<tr>
         <td>${fc.label}</td>
         <td class="mono">${gastFmt(monto)}</td>
+        <td></td>
         <td>${gastFijosFmtPct(pctM)}</td>
         <td>${gastFijosFmtPct(pctA)}</td>
       </tr>`;
@@ -6510,11 +6629,13 @@ function gastRenderFijos() {
 
     const todasCats = GASTOS_FIJOS_CATS.flatMap(fc=>fc.cats);
     const montoTotal = gastFijosMontoEnMes(todasCats, _gastFijosYear, _gastFijosMonth);
+    const pctTotalGrupo = gastPctDelTotalMes(montoTotal, _gastFijosYear, _gastFijosMonth);
     const pctMTotal  = gastFijosPctMensual(todasCats, _gastFijosYear, _gastFijosMonth);
     const pctATotal  = gastFijosPctAcumAnual(todasCats, _gastFijosYear, _gastFijosMonth);
     filas += `<tr style="font-weight:700;border-top:2px solid var(--border)">
       <td>TOTAL</td>
       <td class="mono" style="color:var(--gastos)">${gastFmt(montoTotal)}</td>
+      <td class="mono" style="color:var(--gastos)">${pctTotalGrupo!=null?pctTotalGrupo.toFixed(1)+'%':'—'}</td>
       <td>${gastFijosFmtPct(pctMTotal)}</td>
       <td>${gastFijosFmtPct(pctATotal)}</td>
     </tr>`;
@@ -6607,6 +6728,7 @@ function gastRenderVariables() {
       return `<tr>
         <td>${fc.label}</td>
         <td class="mono">${gastFmt(monto)}</td>
+        <td></td>
         <td>${gastFijosFmtPct(pctM)}</td>
         <td>${gastFijosFmtPct(pctA)}</td>
       </tr>`;
@@ -6614,11 +6736,13 @@ function gastRenderVariables() {
 
     const todasCats = GASTOS_VARIABLES_CATS.flatMap(fc=>fc.cats);
     const montoTotal = gastFijosMontoEnMes(todasCats, _gastVarYear, _gastVarMonth);
+    const pctTotalGrupo = gastPctDelTotalMes(montoTotal, _gastVarYear, _gastVarMonth);
     const pctMTotal  = gastFijosPctMensual(todasCats, _gastVarYear, _gastVarMonth);
     const pctATotal  = gastFijosPctAcumAnual(todasCats, _gastVarYear, _gastVarMonth);
     filas += `<tr style="font-weight:700;border-top:2px solid var(--border)">
       <td>TOTAL</td>
       <td class="mono" style="color:var(--gastos)">${gastFmt(montoTotal)}</td>
+      <td class="mono" style="color:var(--gastos)">${pctTotalGrupo!=null?pctTotalGrupo.toFixed(1)+'%':'—'}</td>
       <td>${gastFijosFmtPct(pctMTotal)}</td>
       <td>${gastFijosFmtPct(pctATotal)}</td>
     </tr>`;
@@ -6918,6 +7042,7 @@ function gastRenderAll() {
   gastRenderWeekBars();
   gastRenderCatBreakdown();
   gastRenderMonthly(); // ya renderiza el panorama anual internamente
+  gastRenderAhorroInv();
 }
 
 /* ── Init ── */
