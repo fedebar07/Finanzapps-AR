@@ -6403,18 +6403,25 @@ function gastRenderAhorroInv() {
 
   const el = document.getElementById('gast-ahorroinv-summary');
   if (el) {
+    // 2 columnas para Ahorro/Inversión + el Total en una fila propia, con todo
+    // el ancho de la tarjeta disponible — 3 columnas angostas no le daban
+    // lugar a los montos largos en pesos y se cortaban en el celular.
+    // overflow-wrap:anywhere es el respaldo: si algún monto crece tanto que
+    // ni así entra, se parte en dos líneas en vez de cortarse en el borde.
     el.innerHTML = `
-      <div class="card" style="padding:12px;border-top:2px solid #34d399">
-        <p class="card-label" style="margin-bottom:4px">Ahorro acumulado</p>
-        <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:#34d399">${gastFmt(totalAhorro)}</p>
-      </div>
-      <div class="card" style="padding:12px;border-top:2px solid #60a5fa">
-        <p class="card-label" style="margin-bottom:4px">Inversión acumulada</p>
-        <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:#60a5fa">${gastFmt(totalInversion)}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div class="card" style="padding:12px;border-top:2px solid #34d399">
+          <p class="card-label" style="margin-bottom:4px">Ahorro acumulado</p>
+          <p style="font-family:var(--mono);font-size:15px;font-weight:700;color:#34d399;overflow-wrap:anywhere">${gastFmt(totalAhorro)}</p>
+        </div>
+        <div class="card" style="padding:12px;border-top:2px solid #60a5fa">
+          <p class="card-label" style="margin-bottom:4px">Inversión acumulada</p>
+          <p style="font-family:var(--mono);font-size:15px;font-weight:700;color:#60a5fa;overflow-wrap:anywhere">${gastFmt(totalInversion)}</p>
+        </div>
       </div>
       <div class="card" style="padding:12px;border-top:2px solid var(--gastos)">
         <p class="card-label" style="margin-bottom:4px">Total combinado</p>
-        <p style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--gastos)">${gastFmt(totalCombinado)}</p>
+        <p style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--gastos);overflow-wrap:anywhere">${gastFmt(totalCombinado)}</p>
       </div>
     `;
   }
@@ -6436,15 +6443,25 @@ function gastAhorroInvRenderChart() {
   const montosPorMes = [];
   for (let m=0; m<12; m++) {
     const key = gastMonthKey(_gastAhorroInvYear, m);
+    // hasData: ¿hay ALGÚN gasto cargado ese mes (de cualquier categoría)?
+    // Sin esto, un mes futuro o sin ningún registro quedaba con la misma
+    // altura que el último mes con datos reales, dando a entender que ya
+    // había pasado algo ahí cuando en realidad no se cargó nada todavía.
+    const hasData = exps.some(e => e.date.startsWith(key));
     const monto = exps
       .filter(e => e.date.startsWith(key) && (e.category==='Ahorro' || e.category==='Inversión'))
       .reduce((s,e)=>s+e.amount, 0);
-    montosPorMes.push(monto);
+    montosPorMes.push({ monto, hasData });
   }
   // Acumulado corrido DESDE ENERO de este año (no arrastra saldo de años
   // anteriores — mismo criterio que "Acumulado del año" de más arriba).
+  // Los meses sin ningún gasto cargado quedan en null: no se dibuja barra.
   let acumulado = 0;
-  const dataPoints = montosPorMes.map(m => { acumulado += m; return acumulado; });
+  const dataPoints = montosPorMes.map(mm => {
+    if (!mm.hasData) return null;
+    acumulado += mm.monto;
+    return acumulado;
+  });
 
   if (_gastAhorroInvChart) _gastAhorroInvChart.destroy();
   _gastAhorroInvChart = new Chart(ctx, {
@@ -6463,7 +6480,7 @@ function gastAhorroInvRenderChart() {
       responsive:true, maintainAspectRatio:false,
       plugins:{legend:{display:false}, tooltip:{
         backgroundColor:'#191c26', borderColor:'#252936', borderWidth:1, titleColor:'#e8eaf2', bodyColor:'#e8eaf2',
-        callbacks:{label:c=>gastFmt(c.raw)}
+        callbacks:{label:c=>c.raw==null?'Sin datos todavía':gastFmt(c.raw)}
       }},
       scales:{
         x:{grid:{display:false},ticks:{color:'#5a6080',font:{size:10}}},
