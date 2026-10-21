@@ -1832,7 +1832,7 @@
       </div>
       <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Lo que fuiste metiendo en Ahorro e Inversión desde que empezaste a usar la app (histórico), y cómo se fue acumulando mes a mes en el año que elijas.</p>
       <div class="gast-collapsible" id="gast-ahorroinv-wrap">
-        <div id="gast-ahorroinv-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px"></div>
+        <div id="gast-ahorroinv-summary" style="margin-bottom:14px"></div>
         <div style="position:relative;height:200px"><canvas id="gast-ahorroinv-chart"></canvas></div>
       </div>
     </div>
@@ -1912,12 +1912,13 @@
           <button class="btn btn-outline btn-sm" onclick="gastFijosChangeMonth(1)">›</button>
         </div>
       </div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:14px">
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
         Aumento mensual (vs. el mes anterior) y acumulado desde enero, para tus gastos fijos: Casa/Alquiler, Luz, Gas, Servicio de agua, Impuesto Municipal, Telefonía/Internet, Auto/Combustible, Seguro y Salud.
       </p>
+      <span id="gast-fijos-pct-badge" class="badge" style="background:rgba(232,255,71,.12);color:var(--gastos);margin-bottom:14px"></span>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Categoría</th><th>Monto</th><th>% del total</th><th>Mensual</th><th>Acum. año</th></tr></thead>
+          <thead><tr><th>Categoría</th><th>Monto</th><th>Mensual</th><th>Acum. año</th></tr></thead>
           <tbody id="gast-fijos-tbody"></tbody>
         </table>
       </div>
@@ -1954,12 +1955,13 @@
           <button class="btn btn-outline btn-sm" onclick="gastVarChangeMonth(1)">›</button>
         </div>
       </div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:14px">
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
         Aumento mensual (vs. el mes anterior) y acumulado desde enero, para tus gastos variables: Supermercado, Esposa, Tarjeta y Varios.
       </p>
+      <span id="gast-var-pct-badge" class="badge" style="background:rgba(244,114,182,.12);color:#f472b6;margin-bottom:14px"></span>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Categoría</th><th>Monto</th><th>% del total</th><th>Mensual</th><th>Acum. año</th></tr></thead>
+          <thead><tr><th>Categoría</th><th>Monto</th><th>Mensual</th><th>Acum. año</th></tr></thead>
           <tbody id="gast-var-tbody"></tbody>
         </table>
       </div>
@@ -6638,7 +6640,6 @@ function gastRenderFijos() {
       return `<tr>
         <td>${fc.label}</td>
         <td class="mono">${gastFmt(monto)}</td>
-        <td></td>
         <td>${gastFijosFmtPct(pctM)}</td>
         <td>${gastFijosFmtPct(pctA)}</td>
       </tr>`;
@@ -6652,11 +6653,13 @@ function gastRenderFijos() {
     filas += `<tr style="font-weight:700;border-top:2px solid var(--border)">
       <td>TOTAL</td>
       <td class="mono" style="color:var(--gastos)">${gastFmt(montoTotal)}</td>
-      <td class="mono" style="color:var(--gastos)">${pctTotalGrupo!=null?pctTotalGrupo.toFixed(1)+'%':'—'}</td>
       <td>${gastFijosFmtPct(pctMTotal)}</td>
       <td>${gastFijosFmtPct(pctATotal)}</td>
     </tr>`;
     tbody.innerHTML = filas;
+
+    const badge = document.getElementById('gast-fijos-pct-badge');
+    if (badge) badge.textContent = pctTotalGrupo!=null ? `📊 Representan el ${pctTotalGrupo.toFixed(1)}% de tu gasto total del mes` : '📊 Sin datos suficientes para calcular el % del total';
   }
 
   gastFijosRenderChart();
@@ -6745,7 +6748,6 @@ function gastRenderVariables() {
       return `<tr>
         <td>${fc.label}</td>
         <td class="mono">${gastFmt(monto)}</td>
-        <td></td>
         <td>${gastFijosFmtPct(pctM)}</td>
         <td>${gastFijosFmtPct(pctA)}</td>
       </tr>`;
@@ -6759,11 +6761,13 @@ function gastRenderVariables() {
     filas += `<tr style="font-weight:700;border-top:2px solid var(--border)">
       <td>TOTAL</td>
       <td class="mono" style="color:var(--gastos)">${gastFmt(montoTotal)}</td>
-      <td class="mono" style="color:var(--gastos)">${pctTotalGrupo!=null?pctTotalGrupo.toFixed(1)+'%':'—'}</td>
       <td>${gastFijosFmtPct(pctMTotal)}</td>
       <td>${gastFijosFmtPct(pctATotal)}</td>
     </tr>`;
     tbody.innerHTML = filas;
+
+    const badge = document.getElementById('gast-var-pct-badge');
+    if (badge) badge.textContent = pctTotalGrupo!=null ? `📊 Representan el ${pctTotalGrupo.toFixed(1)}% de tu gasto total del mes` : '📊 Sin datos suficientes para calcular el % del total';
   }
 
   gastVarRenderChart();
